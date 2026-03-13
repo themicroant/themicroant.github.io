@@ -10,18 +10,28 @@
         font-family: sans-serif;
         background: #1d2024;
         color: #e8eaed;
-        display: grid;
-        place-items: center;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
         min-height: 100vh;
       }
 
       #app {
         padding: 16px;
         background: #2a2f36;
+        width: 100%;
+        max-width: 640px;
+      }
+
+      @media (max-width: 480px) {
+        #app {
+          padding: 8px;
+        }
+      }
         border: 1px solid #3b434d;
       }
     </style>
-    <script type="module" crossorigin src="/assets/index-B8JuhAOq.js"></script>
+    <script type="module" crossorigin src="/assets/index-DPoE5JUG.js"></script>
   </head>
   <body>
     <div id="app"></div>

@@ -61,24 +61,49 @@ button:disabled{opacity:.4;cursor:not-allowed;}
 #menu-screen button{font-size:20px;padding:14px 30px;}
 
 /* ---------- MAP ---------- */
-.map-wrap{
-  overflow-x:auto;overflow-y:hidden;
-  border:2px solid var(--border);border-radius:12px;background:var(--bg-1);
-  padding:20px 10px;
+/* The whole tower fits on one screen (no scrolling): map-screen is a flex
+   column that fills the app height, and the graph flexes to fill whatever
+   space is left below the heading. Rows are distributed evenly across that
+   height and connector lines are drawn between them as an SVG overlay. */
+#map-screen:not(.hidden){
+  display:flex;flex-direction:column;flex:1 1 auto;min-height:0;
+  width:100%;max-width:420px;
 }
-.map-rows{display:flex;flex-direction:column-reverse;gap:26px;min-width:600px;}
+#map-screen h2{flex:0 0 auto;margin:.15em 0;}
+.map-legend{
+  flex:0 0 auto;display:flex;flex-wrap:wrap;justify-content:center;
+  gap:2px 10px;font-size:11px;color:var(--text-dim);margin-bottom:6px;
+}
+.map-legend span{white-space:nowrap;}
+.map-graph{
+  position:relative;flex:1 1 auto;min-height:0;width:100%;
+  border:2px solid var(--border);border-radius:12px;background:var(--bg-1);
+  overflow:hidden;
+}
+.map-edges{position:absolute;inset:0;z-index:0;pointer-events:none;}
+.map-edges line{stroke:var(--border);stroke-width:2;}
+.map-edges line.trav{stroke:var(--green);stroke-opacity:.5;}
+.map-edges line.active{
+  stroke:var(--gold);stroke-width:3;stroke-opacity:.95;
+  filter:drop-shadow(0 0 3px rgba(240,198,116,.85));
+}
+.map-rows{
+  position:absolute;inset:0;z-index:1;
+  display:flex;flex-direction:column-reverse;justify-content:space-between;
+  padding:12px 10px;
+}
 .map-row{display:flex;justify-content:space-around;align-items:center;}
 .node{
-  width:56px;height:56px;border-radius:50%;
+  width:34px;height:34px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  font-size:26px;background:var(--bg-2);border:3px solid var(--border);
-  position:relative;
+  font-size:17px;line-height:1;background:var(--bg-2);border:2px solid var(--border);
+  position:relative;transition:transform .12s, border-color .15s, box-shadow .15s;
 }
-.node.reachable{border-color:var(--gold);cursor:pointer;box-shadow:0 0 14px rgba(240,198,116,.6);}
-.node.reachable:hover{transform:scale(1.12);}
-.node.visited{border-color:var(--green);opacity:.55;}
-.node.current{border-color:var(--blue);box-shadow:0 0 14px rgba(111,168,219,.8);}
-.node.faded{opacity:.35;}
+.node.reachable{border-color:var(--gold);cursor:pointer;box-shadow:0 0 10px rgba(240,198,116,.7);}
+.node.reachable:hover{transform:scale(1.15);}
+.node.visited{border-color:var(--green);opacity:.6;}
+.node.current{border-color:var(--blue);box-shadow:0 0 12px rgba(111,168,219,.9);transform:scale(1.1);}
+.node.faded{opacity:.4;}
 
 /* ---------- COMBAT ---------- */
 #combat-screen{width:100%;}
@@ -195,7 +220,14 @@ button:disabled{opacity:.4;cursor:not-allowed;}
 
   <div class="screen hidden" id="map-screen">
     <h2>🗺️ The Tower</h2>
-    <div class="map-wrap"><div class="map-rows" id="map-rows"></div></div>
+    <div class="map-legend">
+      <span>⚔️ Fight</span><span>💀 Elite</span><span>🔥 Rest</span><span>💰 Shop</span>
+      <span>🎁 Treasure</span><span>❓ Event</span><span>👑 Boss</span>
+    </div>
+    <div class="map-graph" id="map-graph">
+      <svg class="map-edges" id="map-edges"></svg>
+      <div class="map-rows" id="map-rows"></div>
+    </div>
   </div>
 
   <div class="screen hidden" id="combat-screen">

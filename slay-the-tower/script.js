@@ -341,22 +341,85 @@ function spawnEnemy(key, lib, floor) {
   };
 }
 
+/* --- ENCOUNTER DIFFICULTY RATING ---------------------------------------
+   Every candidate encounter is scored as the *expected fraction of the
+   player's max HP it will cost to clear*, using a rough combat model:
+   burn through the enemies' HP at an assumed player offense rate, taking
+   their average damage each turn minus an assumed block rate. Candidate
+   encounters are then filtered to a per-floor target band so the first
+   fights are winnable and difficulty ramps smoothly. See requirements §8. */
+
+// Assumed player capability, growing as the deck improves over the run.
+function playerOffensePerTurn(floor) { return 12 + floor * 1.5; }  // enemy HP removed/turn
+function playerBlockPerTurn(floor) { return 7 + floor * 0.8; }     // incoming damage blocked/turn
+
+// Average HP (scaled) and average damage-per-turn this enemy threatens.
+function enemyThreat(data, floor) {
+  const mult = 1 + floor * 0.045;
+  const hp = ((data.hp[0] + data.hp[1]) / 2) * mult;
+  let dmgSum = 0, strengthPerCycle = 0;
+  data.pattern.forEach(moveKey => {
+    const mv = data.moves[moveKey];
+    if ((mv.kind === 'attack' || mv.kind === 'debuff') && mv.dmg) {
+      dmgSum += (mv.dmg[0] + mv.dmg[1]) / 2;
+    }
+    if (mv.kind === 'buff' && mv.strength) strengthPerCycle += mv.strength;
+  });
+  const patLen = data.pattern.length || 1;
+  let dpt = (dmgSum / patLen) * mult;
+  // Strength buffs ramp future hits; approximate their sustained value.
+  dpt += (strengthPerCycle / patLen) * 2.5 * mult;
+  return { hp, dpt };
+}
+
+// Expected fraction of max HP lost clearing this set of enemies.
+function encounterDifficulty(threats, floor, maxHp) {
+  let totalHp = 0, totalDpt = 0;
+  threats.forEach(t => { totalHp += t.hp; totalDpt += t.dpt; });
+  const economy = 1 + 0.09 * (threats.length - 1); // juggling multiple foes is harder
+  totalDpt *= economy;
+  const turns = Math.max(1, totalHp / playerOffensePerTurn(floor));
+  const rawIncoming = totalDpt * turns;
+  const blocked = Math.min(rawIncoming, playerBlockPerTurn(floor) * turns) * 0.82;
+  return Math.max(0, rawIncoming - blocked) / maxHp;
+}
+
+// Per-floor tuning for a node: the "ideal" expected HP-loss we aim each
+// encounter at (ramps up as the run progresses), a hard ceiling we never
+// exceed (keeps fights winnable), and how many of the closest-to-ideal
+// candidates to randomize among (for variety).
+function difficultyTuning(nodeType, floor) {
+  if (nodeType === 'elite') return { ideal: 0.30 + floor * 0.006, cap: 0.60, variety: 2 };
+  return { ideal: 0.13 + floor * 0.011, cap: 0.45, variety: 4 };
+}
+
 function buildEncounter(node, floor) {
   if (node.type === 'boss') {
     return [spawnEnemy('guardian', BOSS_LIBRARY, floor)];
   }
-  if (node.type === 'elite') {
-    const key = ELITE_KEYS[Math.floor(Math.random() * ELITE_KEYS.length)];
-    return [spawnEnemy(key, ELITE_LIBRARY, floor)];
+  const isElite = node.type === 'elite';
+  const lib = isElite ? ELITE_LIBRARY : ENEMY_LIBRARY;
+  const keys = isElite ? ELITE_KEYS : NORMAL_ENEMY_KEYS;
+  const maxHp = state.player.maxHp;
+  const tuning = difficultyTuning(node.type, floor);
+
+  // Enumerate candidates: every single enemy, plus (for normal fights) every
+  // 2-enemy pairing. Rate each by expected HP loss, drop anything past the
+  // safety cap, then randomize among the few closest to the floor's ideal.
+  const candidates = keys.map(k => [k]);
+  if (!isElite) {
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = i; j < keys.length; j++) candidates.push([keys[i], keys[j]]);
+    }
   }
-  // normal combat: 1-2 enemies
-  const count = Math.random() < 0.45 ? 2 : 1;
-  const enemies = [];
-  for (let i = 0; i < count; i++) {
-    const key = NORMAL_ENEMY_KEYS[Math.floor(Math.random() * NORMAL_ENEMY_KEYS.length)];
-    enemies.push(spawnEnemy(key, ENEMY_LIBRARY, floor));
-  }
-  return enemies;
+  const scored = candidates
+    .map(group => ({ group, diff: encounterDifficulty(group.map(k => enemyThreat(lib[k], floor)), floor, maxHp) }))
+    .sort((a, b) => Math.abs(a.diff - tuning.ideal) - Math.abs(b.diff - tuning.ideal));
+  const safe = scored.filter(s => s.diff <= tuning.cap);
+  const pool = (safe.length ? safe : scored).slice(0, tuning.variety);
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+
+  return pick.group.map(k => spawnEnemy(k, lib, floor));
 }
 
 function shuffle(arr) {
@@ -825,6 +888,7 @@ function renderMap() {
   const wrap = el('map-rows');
   wrap.innerHTML = '';
   const reachable = new Set(reachableNextCols(state.map, state.position.row, state.position.col).map(c => c));
+  const nodeEls = {}; // `${r}-${c}` -> element, for edge drawing
   state.map.rows.forEach((row, r) => {
     const rowDiv = document.createElement('div');
     rowDiv.className = 'map-row';
@@ -842,12 +906,46 @@ function renderMap() {
       btn.title = node.type;
       if (isNext) btn.onclick = () => enterNode(r, node.col);
       rowDiv.appendChild(btn);
+      nodeEls[`${r}-${node.col}`] = btn;
     });
     wrap.appendChild(rowDiv);
   });
-  // scroll to bottom (start) initially, or keep current position roughly centered
-  const wrapEl = document.querySelector('.map-wrap');
-  if (state.position.row <= 0) wrapEl.scrollTop = wrapEl.scrollHeight;
+  drawMapEdges(nodeEls, reachable);
+}
+
+// Draw connector lines between each node and its reachable nodes one row up,
+// as an SVG overlay measured from the laid-out node positions. Edges leaving
+// the current node toward a reachable node are highlighted as the live path.
+function drawMapEdges(nodeEls, reachable) {
+  const svg = el('map-edges');
+  const graph = el('map-graph');
+  const w = graph.clientWidth, h = graph.clientHeight;
+  if (!w || !h) return;
+  svg.setAttribute('width', w);
+  svg.setAttribute('height', h);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const gRect = graph.getBoundingClientRect();
+  const center = (r, c) => {
+    const node = nodeEls[`${r}-${c}`];
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    return { x: rect.left - gRect.left + rect.width / 2, y: rect.top - gRect.top + rect.height / 2 };
+  };
+  let lines = '';
+  for (let r = 0; r < TOTAL_ROWS - 1; r++) {
+    state.map.rows[r].forEach(node => {
+      const from = center(r, node.col);
+      if (!from) return;
+      (state.map.edges[`${r}-${node.col}`] || []).forEach(tc => {
+        const to = center(r + 1, tc);
+        if (!to) return;
+        const isActive = state.position.row === r && state.position.col === node.col && reachable.has(tc);
+        const cls = isActive ? 'active' : (node.visited ? 'trav' : '');
+        lines += `<line x1="${from.x.toFixed(1)}" y1="${from.y.toFixed(1)}" x2="${to.x.toFixed(1)}" y2="${to.y.toFixed(1)}"${cls ? ` class="${cls}"` : ''} />`;
+      });
+    });
+  }
+  svg.innerHTML = lines;
 }
 
 function cardEl(card, opts) {
@@ -1240,6 +1338,10 @@ el('btn-restart-2').onclick = startNewRun;
 el('btn-end-turn').onclick = endPlayerTurn;
 el('btn-view-deck').onclick = () => { renderDeckOverlay(); el('deck-overlay').classList.remove('hidden'); };
 el('btn-close-deck').onclick = () => el('deck-overlay').classList.add('hidden');
+
+// The map's connector lines are measured from laid-out node positions, so
+// redraw them when the viewport changes size (rotation, address bar show/hide).
+window.addEventListener('resize', () => { if (state && state.screen === 'map') renderMap(); });
 
 state = newRunState();
 render();

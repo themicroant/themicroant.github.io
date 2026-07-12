@@ -6,6 +6,67 @@
    ========================================================================= */
 
 /* ---------------------------------------------------------------------- */
+/* SOUND — synthesized via the Web Audio API (no asset files, works offline) */
+/* ---------------------------------------------------------------------- */
+
+const Sound = (() => {
+  let ctx = null;
+  let muted = false;
+  try { muted = localStorage.getItem('stt-muted') === '1'; } catch (e) { /* ignore */ }
+
+  function context() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      try { ctx = new AC(); } catch (e) { return null; }
+    }
+    return ctx;
+  }
+  // Browsers require a user gesture before audio can play; call on first tap.
+  function unlock() { const c = context(); if (c && c.state === 'suspended') c.resume(); }
+
+  // One short enveloped oscillator note, optionally sliding in pitch.
+  function tone(freq, dur, type, gain, slideTo) {
+    if (muted) return;
+    const c = context();
+    if (!c) return;
+    const t = c.currentTime;
+    const osc = c.createOscillator();
+    const env = c.createGain();
+    osc.type = type || 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(gain || 0.14, t + 0.012);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(env); env.connect(c.destination);
+    osc.start(t); osc.stop(t + dur + 0.03);
+  }
+  // A quick arpeggio of notes for jingles.
+  function arp(freqs, dur, type, gain) {
+    freqs.forEach((f, i) => setTimeout(() => tone(f, dur, type, gain), i * 80));
+  }
+
+  return {
+    unlock,
+    toggleMute() { muted = !muted; try { localStorage.setItem('stt-muted', muted ? '1' : '0'); } catch (e) {} return muted; },
+    isMuted() { return muted; },
+    click() { tone(300, 0.05, 'square', 0.07); },
+    select() { tone(440, 0.09, 'triangle', 0.12, 660); },
+    card() { tone(520, 0.07, 'triangle', 0.1, 720); },
+    attack() { tone(190, 0.13, 'sawtooth', 0.16, 90); },
+    block() { tone(300, 0.13, 'sine', 0.14, 440); },
+    hurt() { tone(160, 0.18, 'square', 0.16, 70); },
+    heal() { arp([523, 659, 784], 0.16, 'sine', 0.12); },
+    potion() { tone(420, 0.14, 'triangle', 0.14, 920); },
+    relic() { arp([523, 784, 1047], 0.18, 'triangle', 0.12); },
+    victory() { arp([523, 659, 784, 1047], 0.3, 'triangle', 0.15); },
+    defeat() { arp([392, 330, 262, 174], 0.34, 'sawtooth', 0.14); },
+    map() { tone(320, 0.1, 'sine', 0.1, 520); },
+  };
+})();
+
+/* ---------------------------------------------------------------------- */
 /* DATA: CARDS                                                            */
 /* ---------------------------------------------------------------------- */
 
@@ -223,10 +284,10 @@ function pickUnownedRelic(player) {
 /* MAP GENERATION                                                         */
 /* ---------------------------------------------------------------------- */
 
-const TOTAL_ROWS = 15;
+const TOTAL_ROWS = 13;
 
 function buildMap() {
-  const counts = [3, 4, 4, 4, 4, 4, 3, 4, 4, 4, 3, 4, 4, 3, 1];
+  const counts = [3, 4, 4, 4, 3, 4, 4, 4, 3, 4, 4, 3, 1];
   const rows = [];
   for (let r = 0; r < TOTAL_ROWS; r++) {
     const n = counts[r];
@@ -451,6 +512,7 @@ function startCombat(node, floor) {
     selectedCardUid: null,
     log: [],
     over: false,
+    fx: [], // queued visual effects (floating numbers, hit flashes) for next render
   };
   logCombat(`⚔️ ${enemies.length > 1 ? 'Enemies' : enemies[0].name} appear${enemies.length > 1 ? '' : 's'}!`);
   startPlayerTurn();
@@ -520,6 +582,10 @@ function playCard(card, targetEnemy) {
   c.energy -= data.cost;
   c.hand = c.hand.filter(h => h.uid !== card.uid);
 
+  if (data.dmg) Sound.attack();
+  else if (data.block) Sound.block();
+  else Sound.card();
+
   if (data.dmg) {
     const baseDmg = calcOutgoingDamage(data.dmg, c.playerStrength, c.playerWeak);
     const hits = data.hits || 1;
@@ -529,6 +595,7 @@ function playCard(card, targetEnemy) {
         if (en.hp <= 0) return;
         const dmg = applyVulnerable(baseDmg, en.vulnerable);
         const dealt = dealDamageToTarget(en, dmg, true);
+        c.fx.push({ kind: 'enemyDmg', enemyUid: en.uid, n: dmg });
         logCombat(`${data.emoji} ${data.name} hits ${en.name} for ${dmg} damage.`);
         if (hasRelic(p, 'bronzeScales') && dealt >= 0) { /* thorns is for when player is hit, not here */ }
       }
@@ -536,6 +603,7 @@ function playCard(card, targetEnemy) {
   }
   if (data.block) {
     c.playerBlock += data.block;
+    c.fx.push({ kind: 'playerBlock', n: data.block });
     logCombat(`🛡️ You gain ${data.block} Block.`);
   }
   if (data.vulnerable && targetEnemy) {
@@ -571,15 +639,22 @@ function usePotion(key, targetEnemy) {
   p.potions.splice(p.potions.indexOf(key), 1);
   if (key === 'firePotion') {
     const dealt = dealDamageToTarget(targetEnemy, 20, true);
+    c.fx.push({ kind: 'enemyDmg', enemyUid: targetEnemy.uid, n: 20 });
+    Sound.attack();
     logCombat(`🧨 Fire Potion deals 20 damage to ${targetEnemy.name}.`);
   } else if (key === 'healPotion') {
     p.hp = Math.min(p.maxHp, p.hp + 20);
+    c.fx.push({ kind: 'heal', n: 20 });
+    Sound.heal();
     logCombat('💗 Heal Potion restores 20 HP.');
   } else if (key === 'blockPotion') {
     c.playerBlock += 12;
+    c.fx.push({ kind: 'playerBlock', n: 12 });
+    Sound.block();
     logCombat('🧪 Block Potion grants 12 Block.');
   } else if (key === 'energyPotion') {
     c.energy += 2;
+    Sound.potion();
     logCombat('⚡ Energy Potion grants 2 Energy.');
   }
   state.pendingPotion = null;
@@ -589,6 +664,7 @@ function usePotion(key, targetEnemy) {
 
 function endPlayerTurn() {
   if (state.combat.over) return;
+  Sound.click();
   enemyTurn();
 }
 
@@ -603,8 +679,10 @@ function enemyTurn() {
       const [lo, hi] = scaledRange(move.dmg, enemy.floor);
       let dmg = calcOutgoingDamage(rollRange([lo, hi]), enemy.strength, enemy.weak);
       dmg = applyVulnerable(dmg, c.playerVulnerable);
+      // dealDamageToTarget already applies the HP loss (and honors Block); do
+      // not subtract again here or the player takes double damage.
       const dealt = dealDamageToTarget(p, dmg, false);
-      p.hp = Math.max(0, p.hp - dealt);
+      if (dealt > 0) { c.fx.push({ kind: 'playerDmg', n: dealt }); Sound.hurt(); }
       logCombat(`${enemy.emoji} ${enemy.name} attacks for ${dmg} damage.`);
       if (dealt > 0 && hasRelic(p, 'bronzeScales')) {
         dealDamageToTarget(enemy, 3, true);
@@ -621,8 +699,8 @@ function enemyTurn() {
       if (move.dmg && (move.dmg[1] > 0)) {
         const [lo, hi] = scaledRange(move.dmg, enemy.floor);
         const dmg = applyVulnerable(rollRange([lo, hi]), c.playerVulnerable);
-        const dealt = dealDamageToTarget(p, dmg, false);
-        p.hp = Math.max(0, p.hp - dealt);
+        const dealt = dealDamageToTarget(p, dmg, false); // applies HP loss once
+        if (dealt > 0) { c.fx.push({ kind: 'playerDmg', n: dealt }); Sound.hurt(); }
         logCombat(`${enemy.emoji} ${enemy.name} strikes for ${dmg} damage.`);
       }
       if (move.weak) { c.playerWeak += move.weak; logCombat(`⬇️ You are Weak (${c.playerWeak}).`); }
@@ -647,6 +725,7 @@ function checkCombatEnd() {
     p.hp = 0;
     c.over = true;
     state.screen = 'gameover';
+    Sound.defeat();
     return true;
   }
   if (c.enemies.every(e => e.hp <= 0)) {
@@ -660,6 +739,7 @@ function checkCombatEnd() {
 function resolveCombatVictory() {
   const c = state.combat;
   const p = state.player;
+  if (c.nodeType === 'boss') Sound.victory(); else Sound.select();
   if (hasRelic(p, 'burningBlood')) p.hp = Math.min(p.maxHp, p.hp + 6);
 
   let goldWon = c.nodeType === 'elite' ? (25 + Math.floor(Math.random() * 15))
@@ -674,6 +754,7 @@ function resolveCombatVictory() {
     if (relicWon) {
       p.relics.push(relicWon);
       if (relicWon === 'oldCoin') p.gold += 100;
+      setTimeout(() => Sound.relic(), 300);
     }
   }
 
@@ -710,6 +791,7 @@ function doRestHeal() {
   p.hp = Math.min(p.maxHp, p.hp + amt);
   state.restData.used = true;
   state.restData.msg = `🔥 You rest and recover ${amt} HP.`;
+  Sound.heal();
   render();
 }
 
@@ -719,6 +801,7 @@ function doRestUpgrade(cardUid) {
   if (card && !card.upgraded) card.upgraded = true;
   state.restData.used = true;
   state.restData.msg = `⚒️ You upgrade ${CARD_LIBRARY[card.key].name} to ${CARD_LIBRARY[card.key].name}+!`;
+  Sound.relic();
   render();
 }
 
@@ -745,6 +828,7 @@ function buyCard(idx) {
   p.gold -= item.price;
   p.deck.push(item.card);
   item.bought = true;
+  Sound.click();
   render();
 }
 function buyRelic(idx) {
@@ -755,6 +839,7 @@ function buyRelic(idx) {
   p.relics.push(item.key);
   if (item.key === 'oldCoin') p.gold += 100;
   item.bought = true;
+  Sound.relic();
   render();
 }
 function buyPotion(idx) {
@@ -764,6 +849,7 @@ function buyPotion(idx) {
   p.gold -= item.price;
   p.potions.push(item.key);
   item.bought = true;
+  Sound.click();
   render();
 }
 function removeCardFromDeck(cardUid) {
@@ -790,6 +876,7 @@ function resolveEventChoice(idx) {
   const msg = choice.effect(state.player);
   ed.resolved = true;
   ed.resultMsg = msg;
+  Sound.select();
   render();
 }
 
@@ -809,6 +896,9 @@ function openChest() {
   if (cd.relicKey) {
     p.relics.push(cd.relicKey);
     if (cd.relicKey === 'oldCoin') p.gold += 100;
+    Sound.relic();
+  } else {
+    Sound.select();
   }
   render();
 }
@@ -822,6 +912,7 @@ function enterNode(row, col) {
   node.visited = true;
   state.position = { row, col };
   state.floorsClimbed = row + 1;
+  Sound.select();
 
   if (node.type === 'combat' || node.type === 'elite' || node.type === 'boss') {
     startCombat(node, row);
@@ -882,6 +973,7 @@ function renderTopbar() {
   el('tb-gold').textContent = p.gold;
   el('tb-relics').textContent = `🏺 ${p.relics.length}`;
   el('tb-potions').textContent = `🧪 ${p.potions.length}/${p.maxPotions}`;
+  el('btn-mute').textContent = Sound.isMuted() ? '🔇' : '🔊';
 }
 
 function renderMap() {
@@ -964,9 +1056,23 @@ function cardEl(card, opts) {
   return div;
 }
 
+// Spawn a floating number that rises from a combatant's card. Removed after
+// its animation so repeated hits don't accumulate stale nodes.
+function addFloat(container, entry, i) {
+  const span = document.createElement('span');
+  const cls = entry.kind === 'playerBlock' ? 'block' : entry.kind === 'heal' ? 'heal' : 'dmg';
+  const prefix = entry.kind === 'playerBlock' ? '🛡️' : entry.kind === 'heal' ? '💚+' : '';
+  span.className = 'float-num ' + cls;
+  span.textContent = prefix + entry.n;
+  span.style.animationDelay = (i * 0.11) + 's';
+  container.appendChild(span);
+  setTimeout(() => span.remove(), 1100 + i * 110);
+}
+
 function renderCombat() {
   const c = state.combat;
   const p = state.player;
+  const fx = c.fx || [];
 
   const enemiesRow = el('enemies-row');
   enemiesRow.innerHTML = '';
@@ -977,7 +1083,10 @@ function renderCombat() {
 
   c.enemies.forEach(en => {
     const div = document.createElement('div');
-    div.className = 'enemy' + (en.hp <= 0 ? ' dead' : '') + ((needsTarget || pendingPotion) && en.hp > 0 ? ' targetable' : '');
+    const enemyFx = fx.filter(f => f.enemyUid === en.uid);
+    const tookHit = enemyFx.some(f => f.kind === 'enemyDmg' && f.n > 0);
+    div.className = 'enemy' + (en.hp <= 0 ? ' dead' : '') +
+      ((needsTarget || pendingPotion) && en.hp > 0 ? ' targetable' : '') + (tookHit ? ' hit' : '');
     const move = en.moves[en.nextMove];
     let intentHtml = '❔';
     if (move.kind === 'attack') {
@@ -1007,6 +1116,7 @@ function renderCombat() {
       else if (pendingPotion) div.onclick = () => usePotion(pendingPotion, en);
     }
     enemiesRow.appendChild(div);
+    enemyFx.filter(f => f.kind === 'enemyDmg').forEach((f, i) => addFloat(div, f, i));
   });
 
   const statusRow = el('player-status-row');
@@ -1017,6 +1127,15 @@ function renderCombat() {
     ${c.playerVulnerable ? `<div class="pill">☠️ ${c.playerVulnerable}</div>` : ''}
     ${c.playerWeak ? `<div class="pill">⬇️ ${c.playerWeak}</div>` : ''}
   `;
+  const playerFx = fx.filter(f => f.kind === 'playerDmg' || f.kind === 'playerBlock' || f.kind === 'heal');
+  playerFx.forEach((f, i) => addFloat(statusRow, f, i));
+  if (playerFx.some(f => f.kind === 'playerDmg' && f.n > 0)) {
+    const screen = el('combat-screen');
+    screen.classList.remove('hurt');
+    void screen.offsetWidth; // restart the shake animation if already applied
+    screen.classList.add('hurt');
+    setTimeout(() => screen.classList.remove('hurt'), 450);
+  }
 
   const hand = el('hand');
   hand.innerHTML = '';
@@ -1063,6 +1182,8 @@ function renderCombat() {
   el('turn-count').textContent = `Turn ${c.turn}`;
   el('combat-log').innerHTML = c.log.map(m => `<div>${m}</div>`).join('');
   el('btn-end-turn').disabled = c.over;
+
+  c.fx = []; // effects for this render have been applied
 }
 
 function renderReward() {
@@ -1327,6 +1448,8 @@ function renderDeckOverlay() {
 /* ---------------------------------------------------------------------- */
 
 function startNewRun() {
+  Sound.unlock();
+  Sound.map();
   state = newRunState();
   state.screen = 'map';
   render();
@@ -1336,12 +1459,17 @@ el('btn-new-run').onclick = startNewRun;
 el('btn-restart-1').onclick = startNewRun;
 el('btn-restart-2').onclick = startNewRun;
 el('btn-end-turn').onclick = endPlayerTurn;
-el('btn-view-deck').onclick = () => { renderDeckOverlay(); el('deck-overlay').classList.remove('hidden'); };
+el('btn-view-deck').onclick = () => { Sound.click(); renderDeckOverlay(); el('deck-overlay').classList.remove('hidden'); };
 el('btn-close-deck').onclick = () => el('deck-overlay').classList.add('hidden');
+el('btn-mute').onclick = () => { const muted = Sound.toggleMute(); if (!muted) { Sound.unlock(); Sound.click(); } render(); };
 
 // The map's connector lines are measured from laid-out node positions, so
 // redraw them when the viewport changes size (rotation, address bar show/hide).
 window.addEventListener('resize', () => { if (state && state.screen === 'map') renderMap(); });
+
+// Unlock the audio context on the very first user interaction (mobile browsers
+// block audio until a gesture occurs).
+window.addEventListener('pointerdown', () => Sound.unlock(), { once: true });
 
 state = newRunState();
 render();

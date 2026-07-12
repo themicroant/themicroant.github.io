@@ -127,10 +127,70 @@ const CARD_LIBRARY = {
   immolate: { name: 'Immolate', emoji: '☄️', type: 'attack', rarity: 'rare',
     base: { cost: 2, dmg: 12, aoe: true, exhaust: true }, upgraded: { dmg: 16 },
     desc: c => `Deal ${c.dmg} damage to ALL enemies. Exhaust.` },
+
+  /* ---- MAGE (Frost/Fire/Arcane) ---- */
+  frostbolt: { name: 'Frostbolt', emoji: '❄️', type: 'attack', rarity: 'starter', cls: 'mage',
+    base: { cost: 1, dmg: 5 }, upgraded: { dmg: 8 },
+    desc: c => `Deal ${c.dmg} damage.` },
+  frostWard: { name: 'Frost Ward', emoji: '🧊', type: 'skill', rarity: 'starter', cls: 'mage',
+    base: { cost: 1, block: 5 }, upgraded: { block: 8 },
+    desc: c => `Gain ${c.block} Block.` },
+  fireball: { name: 'Fireball', emoji: '🔥', type: 'attack', rarity: 'starter', cls: 'mage',
+    base: { cost: 2, dmg: 9 }, upgraded: { dmg: 13 },
+    desc: c => `Deal ${c.dmg} damage.` },
+
+  arcaneMissiles: { name: 'Arcane Missiles', emoji: '✨', type: 'attack', rarity: 'common', cls: 'mage',
+    base: { cost: 1, dmg: 3, hits: 3 }, upgraded: { dmg: 4 },
+    desc: c => `Deal ${c.dmg} damage ${c.hits} times.` },
+  iceLance: { name: 'Ice Lance', emoji: '🔹', type: 'attack', rarity: 'common', cls: 'mage',
+    base: { cost: 1, dmg: 5, weak: 1 }, upgraded: { dmg: 7, weak: 1 },
+    desc: c => `Deal ${c.dmg} damage. Apply ${c.weak} Weak.` },
+  scorch: { name: 'Scorch', emoji: '♨️', type: 'attack', rarity: 'common', cls: 'mage',
+    base: { cost: 1, dmg: 8 }, upgraded: { dmg: 11 },
+    desc: c => `Deal ${c.dmg} damage.` },
+  manaShield: { name: 'Mana Shield', emoji: '🧿', type: 'skill', rarity: 'common', cls: 'mage',
+    base: { cost: 1, block: 8, draw: 1 }, upgraded: { block: 11 },
+    desc: c => `Gain ${c.block} Block. Draw ${c.draw} card.` },
+  arcaneIntellect: { name: 'Arcane Intellect', emoji: '📘', type: 'skill', rarity: 'common', cls: 'mage',
+    base: { cost: 1, draw: 2 }, upgraded: { draw: 3 },
+    desc: c => `Draw ${c.draw} cards.` },
+  frostNova: { name: 'Frost Nova', emoji: '🌨️', type: 'attack', rarity: 'common', cls: 'mage',
+    base: { cost: 1, dmg: 6, aoe: true }, upgraded: { dmg: 9 },
+    desc: c => `Deal ${c.dmg} damage to ALL enemies.` },
+
+  flamestrike: { name: 'Flamestrike', emoji: '🌋', type: 'attack', rarity: 'uncommon', cls: 'mage',
+    base: { cost: 2, dmg: 11, aoe: true }, upgraded: { dmg: 15 },
+    desc: c => `Deal ${c.dmg} damage to ALL enemies.` },
+  frostbite: { name: 'Frostbite', emoji: '🥶', type: 'attack', rarity: 'uncommon', cls: 'mage',
+    base: { cost: 2, dmg: 12, weak: 2 }, upgraded: { dmg: 16, weak: 3 },
+    desc: c => `Deal ${c.dmg} damage. Apply ${c.weak} Weak.` },
+  arcanePower: { name: 'Arcane Power', emoji: '🔮', type: 'power', rarity: 'uncommon', cls: 'mage',
+    base: { cost: 1, strength: 3, exhaust: true }, upgraded: { strength: 4 },
+    desc: c => `Gain ${c.strength} Strength this fight. Exhaust.` },
+  evocation: { name: 'Evocation', emoji: '🔷', type: 'skill', rarity: 'uncommon', cls: 'mage',
+    base: { cost: 0, energy: 2, draw: 1, exhaust: true }, upgraded: { draw: 2 },
+    desc: c => `Gain ${c.energy} Energy. Draw ${c.draw} card. Exhaust.` },
+
+  pyroblast: { name: 'Pyroblast', emoji: '☄️', type: 'attack', rarity: 'rare', cls: 'mage',
+    base: { cost: 2, dmg: 22 }, upgraded: { dmg: 28 },
+    desc: c => `Deal ${c.dmg} damage.` },
+  meteor: { name: 'Meteor', emoji: '🌠', type: 'attack', rarity: 'rare', cls: 'mage',
+    base: { cost: 2, dmg: 13, aoe: true, exhaust: true }, upgraded: { dmg: 17 },
+    desc: c => `Deal ${c.dmg} damage to ALL enemies. Exhaust.` },
+  iceBlock: { name: 'Ice Block', emoji: '🧱', type: 'skill', rarity: 'rare', cls: 'mage',
+    base: { cost: 1, block: 20, exhaust: true }, upgraded: { block: 26 },
+    desc: c => `Gain ${c.block} Block. Exhaust.` },
 };
 
-const REWARD_POOL_KEYS = Object.keys(CARD_LIBRARY).filter(k => CARD_LIBRARY[k].rarity !== 'starter');
+// Every card belongs to a character class; the original set is the Warrior's.
+Object.keys(CARD_LIBRARY).forEach(k => { if (!CARD_LIBRARY[k].cls) CARD_LIBRARY[k].cls = 'warrior'; });
+
 const RARITY_WEIGHT = { common: 60, uncommon: 30, rare: 10 };
+
+// Reward/shop card pool for a class: its non-starter cards.
+function rewardKeysFor(cls) {
+  return Object.keys(CARD_LIBRARY).filter(k => CARD_LIBRARY[k].rarity !== 'starter' && CARD_LIBRARY[k].cls === cls);
+}
 
 function getCardData(card) {
   const lib = CARD_LIBRARY[card.key];
@@ -144,16 +204,16 @@ function makeCard(key, upgraded) {
   return { uid: uidCounter++, key, upgraded: !!upgraded };
 }
 
-function buildStartingDeck() {
+// Build a deck from a compact [count, key] recipe.
+function buildDeck(recipe) {
   const deck = [];
-  for (let i = 0; i < 5; i++) deck.push(makeCard('strike'));
-  for (let i = 0; i < 4; i++) deck.push(makeCard('defend'));
-  deck.push(makeCard('bash'));
+  recipe.forEach(([count, key]) => { for (let i = 0; i < count; i++) deck.push(makeCard(key)); });
   return deck;
 }
 
 function weightedCardPick(excludeKeys) {
-  const pool = REWARD_POOL_KEYS.filter(k => !excludeKeys.includes(k));
+  const cls = state && state.player ? state.player.charClass : 'warrior';
+  const pool = rewardKeysFor(cls).filter(k => !excludeKeys.includes(k));
   const weighted = [];
   pool.forEach(k => {
     const w = RARITY_WEIGHT[CARD_LIBRARY[k].rarity] || 10;
@@ -185,7 +245,28 @@ const RELIC_LIBRARY = {
   ringSnake: { name: 'Ring of the Snake', emoji: '🐍', desc: 'Draw 1 additional card each turn.' },
   bronzeScales: { name: 'Bronze Scales', emoji: '🐚', desc: 'Attackers take 3 damage when they hit you.' },
   oldCoin: { name: 'Old Coin', emoji: '🪙', desc: 'A pouch of ancient gold. (Already spent: +100g on pickup.)' },
+  manaCrystal: { name: 'Mana Crystal', emoji: '🔮', desc: 'Gain 1 extra Energy on your first turn of each combat.' },
 };
+
+/* ---------------------------------------------------------------------- */
+/* DATA: CHARACTERS                                                        */
+/* ---------------------------------------------------------------------- */
+
+// Each character defines starting HP, relic(s), a starting deck recipe, and the
+// class whose card pool their rewards/shops draw from.
+const CHARACTERS = {
+  warrior: {
+    name: 'Warrior', emoji: '⚔️', maxHp: 70, relics: ['burningBlood'],
+    blurb: 'Sturdy bruiser — high HP, dependable Block and heavy strikes.',
+    deck: [[5, 'strike'], [4, 'defend'], [1, 'bash']],
+  },
+  mage: {
+    name: 'Frost Mage', emoji: '🧙', maxHp: 60, relics: ['manaCrystal'],
+    blurb: 'Glass cannon — less HP, but chilling frost and burning burst spells.',
+    deck: [[4, 'frostbolt'], [4, 'frostWard'], [1, 'fireball'], [1, 'arcaneIntellect']],
+  },
+};
+const DEFAULT_CHARACTER = 'warrior';
 
 /* ---------------------------------------------------------------------- */
 /* DATA: POTIONS                                                          */
@@ -352,20 +433,23 @@ function reachableNextCols(map, row, col) {
 
 let state = null;
 
-function newPlayer() {
+function newPlayer(charKey) {
+  const ch = CHARACTERS[charKey] || CHARACTERS[DEFAULT_CHARACTER];
   return {
-    maxHp: 70, hp: 70, gold: 99,
-    deck: buildStartingDeck(),
-    relics: ['burningBlood'],
+    charClass: charKey in CHARACTERS ? charKey : DEFAULT_CHARACTER,
+    maxHp: ch.maxHp, hp: ch.maxHp, gold: 99,
+    deck: buildDeck(ch.deck),
+    relics: ch.relics.slice(),
     potions: [],
     maxPotions: 3,
   };
 }
 
-function newRunState() {
+function newRunState(charKey) {
   return {
     screen: 'menu',
-    player: newPlayer(),
+    charKey: charKey in CHARACTERS ? charKey : DEFAULT_CHARACTER,
+    player: newPlayer(charKey),
     map: buildMap(),
     position: { row: -1, col: -1 },
     floorsClimbed: 0,
@@ -574,6 +658,7 @@ function startPlayerTurn() {
     c.playerWeak = Math.max(0, c.playerWeak - 1);
   }
   c.energy = c.maxEnergy;
+  if (c.turn === 1 && hasRelic(p, 'manaCrystal')) c.energy += 1;
   const drawAmt = 5 + (hasRelic(p, 'ringSnake') ? 1 : 0);
   drawCards(drawAmt);
   if (hasRelic(p, 'regenCharm')) p.hp = Math.min(p.maxHp, p.hp + 2);
@@ -977,6 +1062,7 @@ function render() {
   if (!state) return;
   showScreen(state.screen);
   renderTopbar();
+  if (state.screen === 'menu') renderMenu();
   if (state.screen === 'map') renderMap();
   if (state.screen === 'combat') renderCombat();
   if (state.screen === 'reward') renderReward();
@@ -986,6 +1072,23 @@ function render() {
   if (state.screen === 'chest') renderChest();
   if (state.screen === 'gameover') renderGameOver();
   if (state.screen === 'victory') renderVictory();
+}
+
+function renderMenu() {
+  const wrap = el('char-select');
+  wrap.innerHTML = '';
+  Object.keys(CHARACTERS).forEach(key => {
+    const ch = CHARACTERS[key];
+    const div = document.createElement('div');
+    div.className = 'char-card';
+    div.innerHTML = `
+      <div class="cemoji">${ch.emoji}</div>
+      <div class="cn">${ch.name}</div>
+      <div class="chp">❤️ ${ch.maxHp} HP</div>
+      <div class="cblurb">${ch.blurb}</div>`;
+    div.onclick = () => startNewRun(key);
+    wrap.appendChild(div);
+  });
 }
 
 function renderTopbar() {
@@ -1472,17 +1575,24 @@ function renderDeckOverlay() {
 /* INIT / EVENT WIRING                                                    */
 /* ---------------------------------------------------------------------- */
 
-function startNewRun() {
+function startNewRun(charKey) {
   Sound.unlock();
   Sound.map();
-  state = newRunState();
+  state = newRunState(charKey || DEFAULT_CHARACTER);
   state.screen = 'map';
   render();
 }
 
-el('btn-new-run').onclick = startNewRun;
-el('btn-restart-1').onclick = startNewRun;
-el('btn-restart-2').onclick = startNewRun;
+// After a run ends, return to the hero-select menu so a new character can be chosen.
+function returnToMenu() {
+  Sound.click();
+  if (!state) state = newRunState(DEFAULT_CHARACTER);
+  state.screen = 'menu';
+  render();
+}
+
+el('btn-restart-1').onclick = returnToMenu;
+el('btn-restart-2').onclick = returnToMenu;
 el('btn-end-turn').onclick = endPlayerTurn;
 // The Deck button toggles the overlay open/closed (it stays clickable above the
 // overlay via its z-index), so there is no separate close button.
@@ -1506,5 +1616,5 @@ window.addEventListener('resize', () => { if (state && state.screen === 'map') r
 // block audio until a gesture occurs).
 window.addEventListener('pointerdown', () => Sound.unlock(), { once: true });
 
-state = newRunState();
+state = newRunState(DEFAULT_CHARACTER);
 render();

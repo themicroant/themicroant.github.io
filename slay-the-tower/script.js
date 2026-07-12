@@ -390,16 +390,41 @@ function scaledRange(range, floor) {
 }
 function rollRange(range) { return range[0] + Math.floor(Math.random() * (range[1] - range[0] + 1)); }
 
+// Pre-roll the raw damage for an enemy's upcoming move so the intent can show
+// the exact value that will land (and the resolution uses that same roll).
+// Non-damaging moves clear the planned value.
+function planEnemyMove(enemy) {
+  const move = enemy.moves[enemy.nextMove];
+  enemy.plannedDmg = (move && move.dmg && move.dmg[1] > 0)
+    ? rollRange(scaledRange(move.dmg, enemy.floor))
+    : null;
+}
+
+// The exact damage the enemy's next move will deal to the player, factoring in
+// the enemy's Strength/Weak (attacks only) and the player's Vulnerable. Returns
+// null for non-damaging moves. Shown in the intent and used when the move fires,
+// so the previewed number always matches the hit.
+function enemyIncomingDamage(enemy, playerVulnerable) {
+  if (enemy.plannedDmg == null) return null;
+  const move = enemy.moves[enemy.nextMove];
+  const base = move.kind === 'attack'
+    ? calcOutgoingDamage(enemy.plannedDmg, enemy.strength, enemy.weak)
+    : enemy.plannedDmg;
+  return applyVulnerable(base, playerVulnerable);
+}
+
 function spawnEnemy(key, lib, floor) {
   const data = lib[key];
   const [lo, hi] = scaledRange(data.hp, floor);
   const hp = rollRange([lo, hi]);
-  return {
+  const enemy = {
     uid: uidCounter++, key, name: data.name, emoji: data.emoji,
     hp, maxHp: hp, block: 0, strength: 0, vulnerable: 0, weak: 0,
     patternIdx: 0, pattern: data.pattern, moves: data.moves, floor,
-    nextMove: data.pattern[0],
+    nextMove: data.pattern[0], plannedDmg: null,
   };
+  planEnemyMove(enemy);
+  return enemy;
 }
 
 /* --- ENCOUNTER DIFFICULTY RATING ---------------------------------------
@@ -676,9 +701,8 @@ function enemyTurn() {
     enemy.block = 0;
     const move = enemy.moves[enemy.nextMove];
     if (move.kind === 'attack') {
-      const [lo, hi] = scaledRange(move.dmg, enemy.floor);
-      let dmg = calcOutgoingDamage(rollRange([lo, hi]), enemy.strength, enemy.weak);
-      dmg = applyVulnerable(dmg, c.playerVulnerable);
+      // Use the pre-rolled planned damage so the hit matches the shown intent.
+      const dmg = enemyIncomingDamage(enemy, c.playerVulnerable);
       // dealDamageToTarget already applies the HP loss (and honors Block); do
       // not subtract again here or the player takes double damage.
       const dealt = dealDamageToTarget(p, dmg, false);
@@ -696,9 +720,8 @@ function enemyTurn() {
       enemy.strength += move.strength;
       logCombat(`💪 ${enemy.name} gains ${move.strength} Strength.`);
     } else if (move.kind === 'debuff') {
-      if (move.dmg && (move.dmg[1] > 0)) {
-        const [lo, hi] = scaledRange(move.dmg, enemy.floor);
-        const dmg = applyVulnerable(rollRange([lo, hi]), c.playerVulnerable);
+      if (enemy.plannedDmg != null) {
+        const dmg = enemyIncomingDamage(enemy, c.playerVulnerable);
         const dealt = dealDamageToTarget(p, dmg, false); // applies HP loss once
         if (dealt > 0) { c.fx.push({ kind: 'playerDmg', n: dealt }); Sound.hurt(); }
         logCombat(`${enemy.emoji} ${enemy.name} strikes for ${dmg} damage.`);
@@ -710,6 +733,7 @@ function enemyTurn() {
     enemy.weak = Math.max(0, enemy.weak - 1);
     enemy.patternIdx = (enemy.patternIdx + 1) % enemy.pattern.length;
     enemy.nextMove = enemy.pattern[enemy.patternIdx];
+    planEnemyMove(enemy); // pre-roll the next move's damage for its intent
 
     if (p.hp <= 0) break;
   }
@@ -1088,16 +1112,17 @@ function renderCombat() {
     div.className = 'enemy' + (en.hp <= 0 ? ' dead' : '') +
       ((needsTarget || pendingPotion) && en.hp > 0 ? ' targetable' : '') + (tookHit ? ' hit' : '');
     const move = en.moves[en.nextMove];
+    // Show the exact incoming damage (pre-rolled), not the possible range.
+    const incoming = enemyIncomingDamage(en, c.playerVulnerable);
     let intentHtml = '❔';
     if (move.kind === 'attack') {
-      const [lo, hi] = scaledRange(move.dmg, en.floor);
-      intentHtml = `⚔️<span class="intent-num">${lo}-${hi}</span>`;
+      intentHtml = `⚔️<span class="intent-num">${incoming}</span>`;
     } else if (move.kind === 'defend') {
       intentHtml = '🛡️';
     } else if (move.kind === 'buff') {
       intentHtml = '💪';
     } else if (move.kind === 'debuff') {
-      intentHtml = move.dmg && move.dmg[1] > 0 ? `☠️⚔️<span class="intent-num">${scaledRange(move.dmg, en.floor)[0]}-${scaledRange(move.dmg, en.floor)[1]}</span>` : '☠️';
+      intentHtml = incoming != null ? `☠️⚔️<span class="intent-num">${incoming}</span>` : '☠️';
     }
     const statuses = [];
     if (en.strength) statuses.push(`💪${en.strength}`);
@@ -1459,8 +1484,18 @@ el('btn-new-run').onclick = startNewRun;
 el('btn-restart-1').onclick = startNewRun;
 el('btn-restart-2').onclick = startNewRun;
 el('btn-end-turn').onclick = endPlayerTurn;
-el('btn-view-deck').onclick = () => { Sound.click(); renderDeckOverlay(); el('deck-overlay').classList.remove('hidden'); };
-el('btn-close-deck').onclick = () => el('deck-overlay').classList.add('hidden');
+// The Deck button toggles the overlay open/closed (it stays clickable above the
+// overlay via its z-index), so there is no separate close button.
+function toggleDeckOverlay() {
+  const overlay = el('deck-overlay');
+  const opening = overlay.classList.contains('hidden');
+  if (opening) { renderDeckOverlay(); overlay.classList.remove('hidden'); }
+  else { overlay.classList.add('hidden'); }
+  Sound.click();
+}
+el('btn-view-deck').onclick = toggleDeckOverlay;
+// Tapping the dimmed backdrop (outside the panel) also closes it.
+el('deck-overlay').onclick = (e) => { if (e.target === el('deck-overlay')) toggleDeckOverlay(); };
 el('btn-mute').onclick = () => { const muted = Sound.toggleMute(); if (!muted) { Sound.unlock(); Sound.click(); } render(); };
 
 // The map's connector lines are measured from laid-out node positions, so

@@ -197,6 +197,8 @@ button:disabled{opacity:.4;cursor:not-allowed;}
 
 /* ---------- ANIMATIONS & FX ---------- */
 #btn-mute{padding:6px 10px;font-size:16px;}
+/* Keep the Deck toggle above the deck overlay so it stays clickable to close. */
+#btn-view-deck{position:relative;z-index:60;}
 @keyframes shake{
   0%,100%{transform:translateX(0);}
   20%{transform:translateX(-5px);} 40%{transform:translateX(5px);}
@@ -332,7 +334,7 @@ button:disabled{opacity:.4;cursor:not-allowed;}
     <div class="panel">
       <h3>📚 Your Deck</h3>
       <div class="deck-list" id="deck-list"></div>
-      <button id="btn-close-deck">✖️ Close</button>
+      <p class="footer-note" style="margin-top:12px;">Tap 📚 Deck again to close.</p>
     </div>
   </div>
 

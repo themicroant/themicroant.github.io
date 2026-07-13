@@ -78,108 +78,10 @@ const Sound = (() => {
 /* ---------------------------------------------------------------------- */
 // Each library entry: name, emoji, type (attack/skill/power), rarity,
 // base stats, and an optional "upgraded" override object merged onto base.
-const CARD_LIBRARY = {
-    strike: { name: 'Strike', emoji: '⚔️', type: 'attack', rarity: 'starter',
-        base: { cost: 1, dmg: 6 }, upgraded: { dmg: 9 },
-        desc: c => `Deal ${c.dmg} damage.` },
-    defend: { name: 'Defend', emoji: '🛡️', type: 'skill', rarity: 'starter',
-        base: { cost: 1, block: 5 }, upgraded: { block: 8 },
-        desc: c => `Gain ${c.block} Block.` },
-    bash: { name: 'Bash', emoji: '💥', type: 'attack', rarity: 'starter',
-        base: { cost: 2, dmg: 8, vulnerable: 2 }, upgraded: { dmg: 11, vulnerable: 3 },
-        desc: c => `Deal ${c.dmg} damage. Apply ${c.vulnerable} Vulnerable.` },
-    cleave: { name: 'Cleave', emoji: '🌀', type: 'attack', rarity: 'common',
-        base: { cost: 1, dmg: 8, aoe: true }, upgraded: { dmg: 11 },
-        desc: c => `Deal ${c.dmg} damage to ALL enemies.` },
-    twinStrike: { name: 'Twin Strike', emoji: '🗡️', type: 'attack', rarity: 'common',
-        base: { cost: 1, dmg: 5, hits: 2 }, upgraded: { dmg: 7 },
-        desc: c => `Deal ${c.dmg} damage twice.` },
-    ironWave: { name: 'Iron Wave', emoji: '🌊', type: 'attack', rarity: 'common',
-        base: { cost: 1, dmg: 5, block: 5 }, upgraded: { dmg: 7, block: 7 },
-        desc: c => `Deal ${c.dmg} damage. Gain ${c.block} Block.` },
-    pommelStrike: { name: 'Pommel Strike', emoji: '🔨', type: 'attack', rarity: 'common',
-        base: { cost: 1, dmg: 9, draw: 1 }, upgraded: { dmg: 12 },
-        desc: c => `Deal ${c.dmg} damage. Draw ${c.draw} card.` },
-    shrugItOff: { name: 'Shrug It Off', emoji: '🙆', type: 'skill', rarity: 'common',
-        base: { cost: 1, block: 8, draw: 1 }, upgraded: { block: 11 },
-        desc: c => `Gain ${c.block} Block. Draw ${c.draw} card.` },
-    trueGrit: { name: 'True Grit', emoji: '🦾', type: 'skill', rarity: 'common',
-        base: { cost: 1, block: 7, exhaust: true }, upgraded: { block: 10 },
-        desc: c => `Gain ${c.block} Block. Exhaust.` },
-    warcry: { name: 'Warcry', emoji: '📣', type: 'skill', rarity: 'common',
-        base: { cost: 0, strength: 2 }, upgraded: { strength: 3 },
-        desc: c => `Gain ${c.strength} Strength for this combat.` },
-    clothesline: { name: 'Clothesline', emoji: '🩸', type: 'attack', rarity: 'uncommon',
-        base: { cost: 2, dmg: 12, weak: 2 }, upgraded: { dmg: 16, weak: 3 },
-        desc: c => `Deal ${c.dmg} damage. Apply ${c.weak} Weak.` },
-    heavyStrike: { name: 'Heavy Strike', emoji: '💪', type: 'attack', rarity: 'uncommon',
-        base: { cost: 2, dmg: 16 }, upgraded: { dmg: 21 },
-        desc: c => `Deal ${c.dmg} damage.` },
-    inflame: { name: 'Inflame', emoji: '🔥', type: 'power', rarity: 'uncommon',
-        base: { cost: 1, strength: 3, exhaust: true }, upgraded: { strength: 4 },
-        desc: c => `Gain ${c.strength} Strength permanently this fight. Exhaust.` },
-    battleTrance: { name: 'Battle Trance', emoji: '🌟', type: 'skill', rarity: 'uncommon',
-        base: { cost: 0, draw: 3, exhaust: true }, upgraded: { draw: 4 },
-        desc: c => `Draw ${c.draw} cards. Exhaust.` },
-    offering: { name: 'Offering', emoji: '🕯️', type: 'skill', rarity: 'rare',
-        base: { cost: 0, loseHp: 3, energy: 2, draw: 3, exhaust: true }, upgraded: { loseHp: 2, draw: 4 },
-        desc: c => `Lose ${c.loseHp} HP. Gain ${c.energy} Energy. Draw ${c.draw} cards. Exhaust.` },
-    bludgeon: { name: 'Bludgeon', emoji: '🪓', type: 'attack', rarity: 'rare',
-        base: { cost: 3, dmg: 28 }, upgraded: { dmg: 36 },
-        desc: c => `Deal ${c.dmg} damage.` },
-    immolate: { name: 'Immolate', emoji: '☄️', type: 'attack', rarity: 'rare',
-        base: { cost: 2, dmg: 12, aoe: true, exhaust: true }, upgraded: { dmg: 16 },
-        desc: c => `Deal ${c.dmg} damage to ALL enemies. Exhaust.` },
-    /* ---- MAGE (Frost/Fire/Arcane) ---- */
-    frostbolt: { name: 'Frostbolt', emoji: '❄️', type: 'attack', rarity: 'starter', cls: 'mage',
-        base: { cost: 1, dmg: 5 }, upgraded: { dmg: 8 },
-        desc: c => `Deal ${c.dmg} damage.` },
-    frostWard: { name: 'Frost Ward', emoji: '🧊', type: 'skill', rarity: 'starter', cls: 'mage',
-        base: { cost: 1, block: 5 }, upgraded: { block: 8 },
-        desc: c => `Gain ${c.block} Block.` },
-    fireball: { name: 'Fireball', emoji: '🔥', type: 'attack', rarity: 'starter', cls: 'mage',
-        base: { cost: 2, dmg: 9 }, upgraded: { dmg: 13 },
-        desc: c => `Deal ${c.dmg} damage.` },
-    arcaneMissiles: { name: 'Arcane Missiles', emoji: '✨', type: 'attack', rarity: 'common', cls: 'mage',
-        base: { cost: 1, dmg: 3, hits: 3 }, upgraded: { dmg: 4 },
-        desc: c => `Deal ${c.dmg} damage ${c.hits} times.` },
-    iceLance: { name: 'Ice Lance', emoji: '🔹', type: 'attack', rarity: 'common', cls: 'mage',
-        base: { cost: 1, dmg: 5, weak: 1 }, upgraded: { dmg: 7, weak: 1 },
-        desc: c => `Deal ${c.dmg} damage. Apply ${c.weak} Weak.` },
-    scorch: { name: 'Scorch', emoji: '♨️', type: 'attack', rarity: 'common', cls: 'mage',
-        base: { cost: 1, dmg: 8 }, upgraded: { dmg: 11 },
-        desc: c => `Deal ${c.dmg} damage.` },
-    manaShield: { name: 'Mana Shield', emoji: '🧿', type: 'skill', rarity: 'common', cls: 'mage',
-        base: { cost: 1, block: 8, draw: 1 }, upgraded: { block: 11 },
-        desc: c => `Gain ${c.block} Block. Draw ${c.draw} card.` },
-    arcaneIntellect: { name: 'Arcane Intellect', emoji: '📘', type: 'skill', rarity: 'common', cls: 'mage',
-        base: { cost: 1, draw: 2 }, upgraded: { draw: 3 },
-        desc: c => `Draw ${c.draw} cards.` },
-    frostNova: { name: 'Frost Nova', emoji: '🌨️', type: 'attack', rarity: 'common', cls: 'mage',
-        base: { cost: 1, dmg: 6, aoe: true }, upgraded: { dmg: 9 },
-        desc: c => `Deal ${c.dmg} damage to ALL enemies.` },
-    flamestrike: { name: 'Flamestrike', emoji: '🌋', type: 'attack', rarity: 'uncommon', cls: 'mage',
-        base: { cost: 2, dmg: 11, aoe: true }, upgraded: { dmg: 15 },
-        desc: c => `Deal ${c.dmg} damage to ALL enemies.` },
-    frostbite: { name: 'Frostbite', emoji: '🥶', type: 'attack', rarity: 'uncommon', cls: 'mage',
-        base: { cost: 2, dmg: 12, weak: 2 }, upgraded: { dmg: 16, weak: 3 },
-        desc: c => `Deal ${c.dmg} damage. Apply ${c.weak} Weak.` },
-    arcanePower: { name: 'Arcane Power', emoji: '🔮', type: 'power', rarity: 'uncommon', cls: 'mage',
-        base: { cost: 1, strength: 3, exhaust: true }, upgraded: { strength: 4 },
-        desc: c => `Gain ${c.strength} Strength this fight. Exhaust.` },
-    evocation: { name: 'Evocation', emoji: '🔷', type: 'skill', rarity: 'uncommon', cls: 'mage',
-        base: { cost: 0, energy: 2, draw: 1, exhaust: true }, upgraded: { draw: 2 },
-        desc: c => `Gain ${c.energy} Energy. Draw ${c.draw} card. Exhaust.` },
-    pyroblast: { name: 'Pyroblast', emoji: '☄️', type: 'attack', rarity: 'rare', cls: 'mage',
-        base: { cost: 2, dmg: 22 }, upgraded: { dmg: 28 },
-        desc: c => `Deal ${c.dmg} damage.` },
-    meteor: { name: 'Meteor', emoji: '🌠', type: 'attack', rarity: 'rare', cls: 'mage',
-        base: { cost: 2, dmg: 13, aoe: true, exhaust: true }, upgraded: { dmg: 17 },
-        desc: c => `Deal ${c.dmg} damage to ALL enemies. Exhaust.` },
-    iceBlock: { name: 'Ice Block', emoji: '🧱', type: 'skill', rarity: 'rare', cls: 'mage',
-        base: { cost: 1, block: 20, exhaust: true }, upgraded: { block: 26 },
-        desc: c => `Gain ${c.block} Block. Exhaust.` },
-};
+// The editable data tables live in data/game-data.json and are loaded at
+// runtime via game-data.js (window.GAME_DATA). Edit them with the admin tool.
+const GAME_DATA = window.GAME_DATA;
+const CARD_LIBRARY = GAME_DATA.cards;
 // Every card belongs to a character class; the original set is the Warrior's.
 Object.keys(CARD_LIBRARY).forEach(k => { if (!CARD_LIBRARY[k].cls)
     CARD_LIBRARY[k].cls = 'warrior'; });
@@ -188,10 +90,17 @@ const RARITY_WEIGHT = { common: 60, uncommon: 30, rare: 10 };
 function rewardKeysFor(cls) {
     return Object.keys(CARD_LIBRARY).filter(k => CARD_LIBRARY[k].rarity !== 'starter' && CARD_LIBRARY[k].cls === cls);
 }
+// Fill a card description template: `{stat}` -> the card's current stat value.
+function formatDesc(tpl, stats) {
+    return tpl.replace(/\{(\w+)\}/g, (m, key) => {
+        const v = stats[key];
+        return v === undefined ? m : String(v);
+    });
+}
 function getCardData(card) {
     const lib = CARD_LIBRARY[card.key];
     const stats = card.upgraded ? Object.assign({}, lib.base, lib.upgraded) : Object.assign({}, lib.base);
-    return Object.assign({ name: lib.name, emoji: lib.emoji, type: lib.type, rarity: lib.rarity }, stats, { desc: lib.desc(stats) });
+    return Object.assign({ name: lib.name, emoji: lib.emoji, type: lib.type, rarity: lib.rarity }, stats, { desc: formatDesc(lib.desc, stats) });
 }
 let uidCounter = 1;
 function makeCard(key, upgraded) {
@@ -227,79 +136,27 @@ function randomCardChoices(n) {
 /* ---------------------------------------------------------------------- */
 /* DATA: RELICS                                                           */
 /* ---------------------------------------------------------------------- */
-const RELIC_LIBRARY = {
-    burningBlood: { name: 'Burning Blood', emoji: '🩸', desc: 'Heal 6 HP after every combat.' },
-    vajra: { name: 'Vajra Stone', emoji: '💎', desc: 'Start each combat with 1 Strength.' },
-    anchor: { name: 'Anchor', emoji: '⚓', desc: 'Start each combat with 10 Block.' },
-    energyCore: { name: 'Energy Core', emoji: '🔋', desc: 'Gain 1 additional Energy each turn.' },
-    regenCharm: { name: 'Regen Charm', emoji: '❤️‍🩹', desc: 'Heal 2 HP at the start of each of your turns.' },
-    goldenIdol: { name: 'Golden Idol', emoji: '🗿', desc: 'Gain 25% more gold from battles.' },
-    ringSnake: { name: 'Ring of the Snake', emoji: '🐍', desc: 'Draw 1 additional card each turn.' },
-    bronzeScales: { name: 'Bronze Scales', emoji: '🐚', desc: 'Attackers take 3 damage when they hit you.' },
-    oldCoin: { name: 'Old Coin', emoji: '🪙', desc: 'A pouch of ancient gold. (Already spent: +100g on pickup.)' },
-    manaCrystal: { name: 'Mana Crystal', emoji: '🔮', desc: 'Gain 1 extra Energy on your first turn of each combat.' },
-};
+const RELIC_LIBRARY = GAME_DATA.relics;
 /* ---------------------------------------------------------------------- */
 /* DATA: CHARACTERS                                                        */
 /* ---------------------------------------------------------------------- */
 // Each character defines starting HP, relic(s), a starting deck recipe, and the
 // class whose card pool their rewards/shops draw from.
-const CHARACTERS = {
-    warrior: {
-        name: 'Warrior', emoji: '⚔️', maxHp: 70, relics: ['burningBlood'],
-        blurb: 'Sturdy bruiser — high HP, dependable Block and heavy strikes.',
-        deck: [[5, 'strike'], [4, 'defend'], [1, 'bash']],
-    },
-    mage: {
-        name: 'Frost Mage', emoji: '🧙', maxHp: 60, relics: ['manaCrystal'],
-        blurb: 'Glass cannon — less HP, but chilling frost and burning burst spells.',
-        deck: [[4, 'frostbolt'], [4, 'frostWard'], [1, 'fireball'], [1, 'arcaneIntellect']],
-    },
-};
+const CHARACTERS = GAME_DATA.characters;
 const DEFAULT_CHARACTER = 'warrior';
 /* ---------------------------------------------------------------------- */
 /* DATA: POTIONS                                                          */
 /* ---------------------------------------------------------------------- */
-const POTION_LIBRARY = {
-    firePotion: { name: 'Fire Potion', emoji: '🧨', desc: 'Deal 20 damage to one enemy.', target: true },
-    healPotion: { name: 'Heal Potion', emoji: '💗', desc: 'Heal 20 HP.', target: false },
-    blockPotion: { name: 'Block Potion', emoji: '🧪', desc: 'Gain 12 Block.', target: false },
-    energyPotion: { name: 'Energy Potion', emoji: '⚡', desc: 'Gain 2 Energy.', target: false },
-};
+const POTION_LIBRARY = GAME_DATA.potions;
 const POTION_KEYS = Object.keys(POTION_LIBRARY);
 /* ---------------------------------------------------------------------- */
 /* DATA: ENEMIES                                                          */
 /* ---------------------------------------------------------------------- */
-const ENEMY_LIBRARY = {
-    slime: { name: 'Acid Slime', emoji: '🟢', hp: [38, 46], pattern: ['attack', 'attack', 'defend'],
-        moves: { attack: { kind: 'attack', dmg: [7, 10] }, defend: { kind: 'defend', block: [8, 11] } } },
-    goblin: { name: 'Goblin Grunt', emoji: '👺', hp: [35, 42], pattern: ['attack', 'attack', 'weaken'],
-        moves: { attack: { kind: 'attack', dmg: [8, 12] }, weaken: { kind: 'debuff', weak: 2, dmg: [4, 6] } } },
-    bat: { name: 'Cave Bat', emoji: '🦇', hp: [30, 36], pattern: ['attack', 'attack', 'attack', 'defend'],
-        moves: { attack: { kind: 'attack', dmg: [6, 9] }, defend: { kind: 'defend', block: [6, 8] } } },
-    cultist: { name: 'Cultist', emoji: '🧙', hp: [40, 48], pattern: ['ritual', 'attack', 'attack'],
-        moves: { ritual: { kind: 'buff', strength: 3 }, attack: { kind: 'attack', dmg: [9, 13] } } },
-    hound: { name: 'Shadow Hound', emoji: '🐺', hp: [32, 38], pattern: ['attack', 'attack', 'vulnerable'],
-        moves: { attack: { kind: 'attack', dmg: [7, 10] }, vulnerable: { kind: 'debuff', vulnerable: 2, dmg: [5, 7] } } },
-    skeleton: { name: 'Bone Warrior', emoji: '💀', hp: [36, 44], pattern: ['defend', 'attack', 'attack'],
-        moves: { attack: { kind: 'attack', dmg: [8, 11] }, defend: { kind: 'defend', block: [7, 9] } } },
-};
+const ENEMY_LIBRARY = GAME_DATA.enemies;
 const NORMAL_ENEMY_KEYS = Object.keys(ENEMY_LIBRARY);
-const ELITE_LIBRARY = {
-    ogre: { name: 'Rock Ogre', emoji: '👹', hp: [70, 80], pattern: ['smash', 'smash', 'defend'],
-        moves: { smash: { kind: 'attack', dmg: [16, 20] }, defend: { kind: 'defend', block: [15, 18] } } },
-    sentinel: { name: 'Stone Sentinel', emoji: '🗿', hp: [75, 85], pattern: ['charge', 'attack', 'attack'],
-        moves: { charge: { kind: 'buff', strength: 4 }, attack: { kind: 'attack', dmg: [13, 17] } } },
-};
+const ELITE_LIBRARY = GAME_DATA.elites;
 const ELITE_KEYS = Object.keys(ELITE_LIBRARY);
-const BOSS_LIBRARY = {
-    guardian: { name: 'Tower Guardian', emoji: '🐉', hp: [180, 200], pattern: ['slam', 'slam', 'roar', 'attack', 'attack'],
-        moves: {
-            slam: { kind: 'attack', dmg: [22, 26] },
-            roar: { kind: 'debuff', weak: 3, vulnerable: 2, dmg: [0, 0] },
-            attack: { kind: 'attack', dmg: [14, 18] },
-        } },
-};
+const BOSS_LIBRARY = GAME_DATA.boss;
 /* ---------------------------------------------------------------------- */
 /* DATA: EVENTS                                                           */
 /* ---------------------------------------------------------------------- */

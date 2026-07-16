@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🐹⚡ Emojimon</title>
+<style>
+:root{
+  --bg-0:#0c1210;
+  --bg-1:#152420;
+  --bg-2:#1d332c;
+  --bg-3:#2a4a3f;
+  --gold:#f0c674;
+  --red:#e0555e;
+  --green:#7ec98f;
+  --blue:#6fa8dc;
+  --text:#e8f0ea;
+  --text-dim:#9fc4ac;
+  --border:#3d6656;
+  --tile:28px;
+}
+*{box-sizing:border-box;}
+html,body{
+  margin:0;padding:0;min-height:100%;
+  background:radial-gradient(circle at 50% 0%, var(--bg-2), var(--bg-0) 70%);
+  color:var(--text);
+  font-family:'Trebuchet MS','Segoe UI',sans-serif;
+  overflow-x:hidden;
+}
+#app{min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:10px;max-width:100vw;}
+button{
+  font-family:inherit;cursor:pointer;border:2px solid var(--border);background:var(--bg-2);
+  color:var(--text);border-radius:10px;padding:8px 14px;font-size:14px;
+  transition:transform .1s, background .15s, border-color .15s;
+}
+button:hover:not(:disabled){background:var(--bg-3);border-color:var(--gold);transform:translateY(-2px);}
+button:disabled{opacity:.35;cursor:not-allowed;}
+.hidden{display:none !important;}
+
+/* ---------- topbar ---------- */
+.topbar{
+  width:100%;max-width:520px;display:flex;align-items:center;gap:10px;
+  padding:6px 12px;background:var(--bg-1);border:2px solid var(--border);border-radius:12px;
+  margin-bottom:8px;flex-wrap:wrap;
+}
+.tb-item{font-weight:bold;white-space:nowrap;}
+.tb-party{display:flex;gap:2px;flex:1;flex-wrap:wrap;}
+.tb-mon{font-size:18px;}
+.tb-btn{padding:4px 8px;font-size:16px;margin-left:auto;}
+
+/* ---------- intro ---------- */
+.intro-screen{text-align:center;margin-top:12dvh;display:flex;flex-direction:column;align-items:center;gap:14px;}
+.intro-title{font-size:44px;font-weight:bold;text-shadow:0 0 16px rgba(240,198,116,.5);}
+.intro-sub{color:var(--text-dim);max-width:320px;}
+.big-btn{font-size:18px;padding:14px 28px;border-radius:14px;background:var(--bg-3);}
+.small-btn{font-size:13px;padding:8px 14px;}
+
+/* ---------- overworld ---------- */
+.overworld-screen{display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;}
+.map-name{font-weight:bold;color:var(--gold);letter-spacing:.04em;}
+.map-viewport{position:relative;border:3px solid var(--border);border-radius:10px;overflow:hidden;background:#000;}
+.map-grid{display:grid;grid-template-columns:repeat(var(--cols),var(--tile));}
+.tile{width:var(--tile);height:var(--tile);display:flex;align-items:center;justify-content:center;font-size:calc(var(--tile) * .78);line-height:1;background:rgba(255,255,255,0.02);}
+.entities-layer{position:absolute;top:0;left:0;pointer-events:none;}
+.entity{
+  position:absolute;top:0;left:0;width:var(--tile);height:var(--tile);
+  display:flex;align-items:center;justify-content:center;font-size:calc(var(--tile) * .78);
+  transition:transform .15s linear;
+}
+.ent-player{animation:bob 1.6s ease-in-out infinite;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));z-index:5;}
+.ent-trainer,.ent-building{z-index:3;}
+@keyframes bob{0%,100%{transform-origin:center;translate:0 0;}50%{translate:0 -2px;}}
+/* combine bob with position transform via nested wrapper is overkill for a prototype;
+   browsers apply `translate` (this property) independently of `transform`, so the position
+   transform above and this idle bob can coexist without clobbering each other. */
+
+@media (max-width:480px){:root{--tile:20px;}}
+@media (max-width:340px){:root{--tile:17px;}}
+
+.dpad{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:4px;}
+.dpad-row{display:flex;gap:4px;}
+.dpad-btn{width:46px;height:46px;font-size:18px;padding:0;border-radius:10px;}
+.dpad-face{background:transparent;border-color:transparent;cursor:default;}
+.ow-menu-row{display:flex;gap:8px;margin-top:4px;}
+
+/* ---------- dialogue ---------- */
+.dialogue-box,.battle-textbox{
+  position:relative;width:100%;max-width:480px;background:var(--bg-1);border:2px solid var(--gold);
+  border-radius:10px;padding:12px 16px;margin-top:6px;cursor:pointer;min-height:44px;
+}
+.dialogue-text{line-height:1.4;}
+.dialogue-next{position:absolute;bottom:6px;right:10px;color:var(--gold);animation:blink 1s infinite;}
+@keyframes blink{0%,49%{opacity:1;}50%,100%{opacity:0;}}
+
+/* ---------- battle ---------- */
+.battle-screen{width:100%;max-width:520px;display:flex;flex-direction:column;gap:8px;}
+.battle-field{
+  border:3px solid var(--border);border-radius:14px;padding:14px;min-height:220px;
+  display:flex;flex-direction:column;justify-content:space-between;
+  background:linear-gradient(180deg,#274a3d,#173026);
+}
+.battle-screen.bg-grass .battle-field{background:linear-gradient(180deg,#2c5c3a,#173822);}
+.battle-screen.bg-forest .battle-field{background:linear-gradient(180deg,#1f4430,#0f2418);}
+.battle-screen.bg-water .battle-field,.battle-screen.bg-sand .battle-field{background:linear-gradient(180deg,#1c4f66,#123246);}
+.battle-screen.bg-cave .battle-field{background:linear-gradient(180deg,#2b2b3a,#131320);}
+.battle-screen.bg-snow .battle-field,.battle-screen.bg-mountain .battle-field{background:linear-gradient(180deg,#3d566b,#1c2a35);}
+.battle-screen.bg-town .battle-field{background:linear-gradient(180deg,#2c4a5c,#152631);}
+.combatant{display:flex;align-items:center;gap:10px;}
+.enemy-side{justify-content:flex-end;}
+.player-side{justify-content:flex-start;}
+.combatant-card{
+  background:rgba(12,18,16,.8);border:2px solid var(--border);border-radius:10px;padding:6px 10px;min-width:150px;
+}
+.combatant-name{font-size:13px;font-weight:bold;margin-bottom:2px;}
+.sprite{font-size:46px;filter:drop-shadow(0 4px 4px rgba(0,0,0,.5));animation:sprite-idle 2.4s ease-in-out infinite;}
+@keyframes sprite-idle{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+.hpbar-track{width:120px;height:8px;background:#111;border-radius:6px;overflow:hidden;border:1px solid #000;}
+.hpbar-fill{height:100%;transition:width .4s ease, background-color .4s ease;}
+.hp-good{background:var(--green);}
+.hp-warn{background:var(--gold);}
+.hp-bad{background:var(--red);}
+.hpnum{font-size:11px;color:var(--text-dim);}
+.status-tag{font-size:11px;background:var(--bg-3);padding:1px 5px;border-radius:6px;margin-left:4px;}
+
+.battle-bottom{min-height:90px;}
+.battle-menu{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.moves-menu,.party-menu{grid-template-columns:1fr 1fr;}
+.battle-btn{width:100%;text-align:left;}
+.back-btn{grid-column:1 / -1;}
+
+/* ---------- list screens (party/bag/box/shop/pause) ---------- */
+.list-screen{width:100%;max-width:480px;display:flex;flex-direction:column;gap:10px;align-items:stretch;}
+.list-title{font-size:18px;font-weight:bold;color:var(--gold);text-align:center;}
+.party-list{display:flex;flex-direction:column;gap:8px;}
+.party-row{display:flex;gap:10px;align-items:center;background:var(--bg-1);border:2px solid var(--border);border-radius:10px;padding:8px;}
+.party-row.fainted{opacity:.5;}
+.party-emoji{font-size:30px;}
+.party-info{flex:1;}
+.moves-list{margin-top:2px;}
+.mini-move{font-size:11px;background:var(--bg-3);padding:1px 5px;border-radius:6px;margin-right:3px;display:inline-block;margin-top:2px;}
+.bag-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg-1);border:2px solid var(--border);border-radius:10px;padding:8px 12px;}
+.shop-msg{color:var(--gold);text-align:center;}
+.empty-msg{color:var(--text-dim);text-align:center;padding:20px;}
+
+/* mute affects nothing visually beyond the topbar icon; kept for future use */
+body.muted{}
+
+@media (max-width:400px){
+  .combatant-card{min-width:110px;}
+  .hpbar-track{width:80px;}
+  .sprite{font-size:36px;}
+  .battle-menu{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="game-data.js"></script>
+<script src="sound.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

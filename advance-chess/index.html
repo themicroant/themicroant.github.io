@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>♞ Advance Chess: Wars of the Roses</title>
+<style>
+:root {
+  --bg-0: #0c1210;
+  --bg-1: #152420;
+  --bg-2: #1d332c;
+  --bg-3: #2a4a3f;
+  --accent: #f0c674;
+  --text: #e8f0ea;
+  --text-dim: #9fc4ac;
+  --border: #3d6656;
+  --danger: #e0555e;
+  --good: #7ec98f;
+  --sq-light: #2a4a3f;
+  --sq-dark: #152420;
+  --house-w: #d8d8d8;
+  --house-b: #c0293b;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+body.phase-2, body.phase-3 {
+  background: radial-gradient(ellipse at top, #241014 0%, var(--bg-0) 55%);
+  transition: background 1s ease;
+}
+#app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  gap: 10px;
+}
+.panel {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+}
+.panel h1 {
+  color: var(--accent);
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+.panel p {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  margin-top: 10px;
+}
+button:hover:not(:disabled) { background: var(--bg-3); border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+
+#game-wrap {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* HUD */
+.hud {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.side-card {
+  flex: 1;
+  background: var(--bg-1);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.side-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(240, 198, 116, 0.35);
+}
+.side-card .name { font-weight: bold; color: var(--text); display: flex; align-items: center; gap: 4px; }
+.side-card .sub { color: var(--text-dim); font-size: 0.78rem; }
+.side-card .up { color: var(--accent); font-size: 0.78rem; margin-top: 2px; }
+body.phase-2 .side-card.house-w, body.phase-3 .side-card.house-w { border-color: var(--house-w); }
+body.phase-2 .side-card.house-b, body.phase-3 .side-card.house-b { border-color: var(--house-b); }
+body.phase-2 .side-card.house-w.active, body.phase-3 .side-card.house-w.active { box-shadow: 0 0 12px rgba(216,216,216,0.5); }
+body.phase-2 .side-card.house-b.active, body.phase-3 .side-card.house-b.active { box-shadow: 0 0 12px rgba(192,41,59,0.5); }
+
+.toolbar { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.toolbar button { margin-top: 0; padding: 6px 10px; font-size: 13px; }
+.phase-badge {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  letter-spacing: 0.03em;
+}
+
+/* Board */
+#board-frame {
+  border: 3px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  background: var(--bg-1);
+  transition: border-color 0.8s ease;
+}
+body.phase-2 #board-frame, body.phase-3 #board-frame {
+  border-color: #8a3b45;
+  box-shadow: 0 0 18px rgba(192,41,59,0.25);
+}
+#board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sq {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: min(7vw, 38px);
+  user-select: none;
+  cursor: pointer;
+}
+.sq.light { background: var(--sq-light); }
+.sq.dark { background: var(--sq-0, var(--bg-0)); background: #0e1815; }
+.sq .piece { line-height: 1; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.6)); position: relative; z-index: 2; }
+.sq .piece.w { color: #fafafa; -webkit-text-stroke: 0.6px #33261a; paint-order: stroke fill; }
+.sq .piece.b { color: #0a0a0a; -webkit-text-stroke: 1.4px #e8c9c9; paint-order: stroke fill; }
+.sq.cursor::after {
+  content: ""; position: absolute; inset: 2px; border: 2px solid var(--accent); border-radius: 4px; pointer-events: none;
+}
+.sq.selected { background: #3d5a3d; }
+.sq.last-from, .sq.last-to { box-shadow: inset 0 0 0 999px rgba(240, 198, 116, 0.18); }
+.sq .dot { position: absolute; width: 26%; height: 26%; border-radius: 50%; background: rgba(240, 198, 116, 0.55); z-index: 1; }
+.sq .ring { position: absolute; inset: 8%; border: 3px solid rgba(224, 85, 94, 0.75); border-radius: 50%; z-index: 1; }
+.sq.in-check { background: rgba(224, 85, 94, 0.45) !important; }
+.sq .badge {
+  position: absolute; top: 1px; right: 2px; font-size: 0.5em; z-index: 3;
+  filter: drop-shadow(0 0 2px #000);
+}
+.sq.upgraded .piece { text-shadow: 0 0 6px var(--accent), 0 0 10px var(--accent); }
+.sq.clash { animation: clash 0.32s ease; }
+@keyframes clash {
+  0% { background-color: rgba(224, 85, 94, 0.9); }
+  100% { background-color: transparent; }
+}
+.sq.shake { animation: shake 0.32s ease; }
+@keyframes shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-3px, 1px); }
+  50% { transform: translate(3px, -1px); }
+  75% { transform: translate(-2px, 0); }
+}
+
+/* Move log */
+#log-panel {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-size: 0.82rem;
+}
+#log-panel .entry { padding: 2px 0; border-bottom: 1px solid rgba(61,102,86,0.3); color: var(--text-dim); }
+#log-panel .entry .mv { color: var(--text); }
+#log-panel .entry .flavor { display: block; font-style: italic; color: var(--accent); font-size: 0.78rem; }
+
+/* Modals */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+  padding: 16px;
+}
+.overlay.hidden { display: none; }
+.modal {
+  background: var(--bg-1); border: 2px solid var(--border); border-radius: 12px;
+  padding: 20px; max-width: 420px; width: 100%; text-align: center;
+}
+.modal h2 { color: var(--accent); margin: 0 0 6px; font-size: 1.15rem; }
+.modal p { color: var(--text-dim); font-size: 0.9rem; }
+.choice-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.choice-row button { font-size: 24px; padding: 10px 14px; }
+.upgrade-option {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  width: 100%; margin-top: 8px; padding: 10px;
+}
+.upgrade-option .em { font-size: 22px; }
+.upgrade-option .info { flex: 1; }
+.upgrade-option .info b { color: var(--accent); }
+.upgrade-option .info small { color: var(--text-dim); display: block; }
+
+/* Banner */
+#banner {
+  position: fixed; top: 14%; left: 50%; transform: translate(-50%, -20px);
+  background: linear-gradient(135deg, #3a1218, #1a0c10);
+  border: 2px solid var(--house-b);
+  border-radius: 10px;
+  padding: 16px 22px;
+  text-align: center;
+  z-index: 40;
+  max-width: 90vw;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+#banner.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+#banner .title { font-size: 1.1rem; color: var(--accent); font-weight: bold; }
+#banner .subtitle { font-size: 0.85rem; color: var(--text-dim); margin-top: 4px; }
+
+.sq.upgrade-eligible::after {
+  content: ""; position: absolute; inset: 3px; border: 2px dashed var(--accent); border-radius: 4px; pointer-events: none;
+}
+.modal ul { text-align: left; color: var(--text-dim); font-size: 0.85rem; padding-left: 18px; }
+.modal ul li { margin-bottom: 4px; }
+.modal .upgrade-list { list-style: none; padding-left: 0; }
+
+.hidden { display: none !important; }
+
+@media (max-width: 400px) {
+  .panel, #game-wrap { max-width: 100%; }
+  .side-card { font-size: 0.75rem; }
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="banner"></div>
+<script src="game-data.js"></script>
+<script src="sound.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

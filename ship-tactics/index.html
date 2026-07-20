@@ -165,20 +165,64 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .gameover-title { font-size: 40px; }
 #gameover-stats { color: var(--text-dim); font-size: 13px; line-height: 1.6; margin: 10px 0 16px; }
 
-#btn-mute { position: fixed; top: 10px; right: 10px; padding: 6px 9px; font-size: 15px; z-index: 20; }
+.top-buttons { position: fixed; top: 10px; right: 10px; z-index: 30; display: flex; gap: 6px; }
+.top-buttons button { padding: 6px 9px; font-size: 15px; }
+
+/* ---------- TUTORIAL ---------- */
+.overlay {
+  position: fixed; inset: 0; background: rgba(3, 5, 10, 0.82); z-index: 50;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.tutorial-panel {
+  background: var(--bg-1); border: 2px solid var(--border); border-radius: 16px;
+  max-width: 480px; width: 100%; max-height: 88dvh; overflow-y: auto;
+  padding: 20px; position: relative;
+}
+.tutorial-close { position: absolute; top: 10px; right: 10px; padding: 4px 9px; font-size: 14px; }
+.tutorial-slide h2 { color: var(--gold); font-size: 19px; margin: 0 26px 4px 0; }
+.tutorial-slide .tut-sub { color: var(--text-dim); font-size: 12px; margin-bottom: 14px; }
+.tutorial-slide p { font-size: 13.5px; line-height: 1.55; margin: 8px 0; }
+.tut-diagram { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 10px 0; }
+.tut-row { display: flex; align-items: flex-start; gap: 8px; margin: 7px 0; font-size: 12.5px; line-height: 1.4; }
+.tut-row .tut-icon { font-size: 20px; width: 26px; text-align: center; flex-shrink: 0; }
+.tut-row .tut-label { color: var(--text); font-weight: bold; }
+.tut-row .tut-desc { color: var(--text-dim); }
+.tut-flow { display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; margin: 12px 0; }
+.tut-flow-step {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px;
+  font-size: 10.5px; text-align: center; min-width: 58px; color: var(--text-dim);
+}
+.tut-flow-step b { display: block; font-size: 17px; }
+.tut-arrow { color: var(--text-dim); font-size: 14px; }
+.vent-demo { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
+.vent-demo-col { text-align: center; }
+.vent-demo-label { font-size: 10.5px; color: var(--text-dim); margin-bottom: 6px; }
+.vent-demo-note { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+.vent-demo-arrow { font-size: 20px; color: var(--gold); text-align: center; }
+.vent-demo-legend { background: var(--bg-2); border-radius: 8px; padding: 8px 10px; margin-top: 10px; font-size: 12px; }
+.vent-demo-legend > div { margin: 5px 0; display: flex; align-items: flex-start; gap: 6px; line-height: 1.4; }
+.dice-demo { display: flex; gap: 6px; justify-content: center; margin: 10px 0; flex-wrap: wrap; }
+.tutorial-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; gap: 8px; }
+.tutorial-dots { display: flex; gap: 5px; }
+.tutorial-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--bg-3); border: 1px solid var(--border); display: inline-block; }
+.tutorial-dots span.active { background: var(--gold); border-color: var(--gold); }
+.action-prompt.long { text-align: left; line-height: 1.4; }
 
 @media (max-width: 420px) {
   .faction-card { width: 160px; }
   .hud-card .hname { font-size: 11px; }
   .part-chip { font-size: 13px; }
   #app { padding-top: 48px; }
-  #btn-mute { top: 6px; right: 6px; }
+  .top-buttons { top: 6px; right: 6px; }
 }
 </style>
 </head>
 <body>
 <div id="app">
-  <button id="btn-mute" title="Toggle sound">🔊</button>
+  <div class="top-buttons">
+    <button id="btn-help" title="How to play">❓</button>
+    <button id="btn-mute" title="Toggle sound">🔊</button>
+  </div>
 
   <div class="screen" id="screen-start">
     <div class="title">🚀 Snap Ships Tactics</div>
@@ -197,7 +241,10 @@ button:disabled { opacity: .35; cursor: not-allowed; }
           if you let it get close.</div>
       </div>
     </div>
-    <button id="btn-deploy">⚔️ Deploy</button>
+    <div>
+      <button id="btn-deploy">⚔️ Deploy</button>
+      <button id="btn-tutorial-open">📖 How to Play</button>
+    </div>
     <p class="footer-note">Rotate, move, and fire using the exact preset Control Panels from the
       Snap Ships Tactics rulebook's recommended first game. Full rules in <code>docs/requirements.md</code>.</p>
   </div>
@@ -229,6 +276,18 @@ button:disabled { opacity: .35; cursor: not-allowed; }
       <div class="gameover-title" id="gameover-title">🏆 Victory!</div>
       <p id="gameover-stats"></p>
       <button id="btn-play-again">🔁 Play Again</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="tutorial-overlay">
+    <div class="tutorial-panel">
+      <button class="tutorial-close" id="btn-tutorial-close">✕</button>
+      <div class="tutorial-slide" id="tutorial-slide-content"></div>
+      <div class="tutorial-nav">
+        <button id="btn-tutorial-prev">◀ Back</button>
+        <div class="tutorial-dots" id="tutorial-dots"></div>
+        <button id="btn-tutorial-next" class="primary">Next ▶</button>
+      </div>
     </div>
   </div>
 </div>

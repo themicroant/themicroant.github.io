@@ -125,9 +125,9 @@ function wait(ms) { return new Promise(resolve => setTimeout(resolve, state.fast
 /* PLAYER PROMPTS                                                          */
 /* ---------------------------------------------------------------------- */
 // promptText: string. options: [{label, value, disabled, cls}]. Resolves to the chosen value.
-function choose(promptText, options) {
+function choose(promptText, options, long) {
   return new Promise(resolve => {
-    state.prompt = { text: promptText, options };
+    state.prompt = { text: promptText, options, long: !!long };
     pendingResolve = resolve;
     renderActionBar();
   });
@@ -292,7 +292,8 @@ async function promptVentOne(side, ship, promptText) {
       const k = c.part.key + c.type;
       if (seen.has(k)) return;
       seen.add(k);
-      opts.push({ label: `${c.type === 'power' ? '⚡' : '🔥'} ${c.part.name}`, value: k });
+      const isPower = c.type === 'power';
+      opts.push({ label: `${isPower ? '⚡ Vent Power' : '🔥 Vent Heat'} — ${c.part.name}`, value: k });
     });
     const val = await choose(promptText, opts);
     const c = cubes.find(cc => cc.part.key + cc.type === val);
@@ -325,10 +326,19 @@ async function doVentStep(side, ship) {
         const k = c.part.key + c.type;
         if (seen.has(k)) return;
         seen.add(k);
-        opts.push({ label: `${c.type === 'power' ? '⚡' : '🔥'} ${c.part.name}`, value: k });
+        const isPower = c.type === 'power';
+        opts.push({
+          label: `${isPower ? '⚡ Vent Power' : '🔥 Vent Heat'} — ${c.part.name}`,
+          value: k,
+        });
       });
       opts.push({ label: '✅ Done Venting', value: '__done__', cls: 'primary' });
-      const val = await choose(`Vent Step: up to ${max - vented} cube(s) (any combo).`, opts);
+      const val = await choose(
+        `💨 Vent Step — parts with cubes on them are locked and can't act again until vented. ` +
+        `Clear up to ${max - vented} more cube(s), any parts, any mix. ⚡ Power returns to your pool to spend again; ` +
+        `🔥 Heat is discarded for good. Venting is optional — tap ❓ above for a full walkthrough.`,
+        opts, true
+      );
       if (val === '__done__') break;
       const c = cubes.find(cc => cc.part.key + cc.type === val);
       ventCube(ship, c.part, c.type);
@@ -1030,6 +1040,7 @@ function renderActionBar() {
   const gridEl = $('action-grid');
   if (!state.prompt) { promptEl.textContent = ''; gridEl.innerHTML = ''; return; }
   promptEl.textContent = state.prompt.text;
+  promptEl.classList.toggle('long', !!state.prompt.long);
   const compassOpts = state.prompt.options.filter(o => o.compass);
   if (compassOpts.length === 8) {
     const grid = document.createElement('div');
@@ -1072,6 +1083,148 @@ function renderGameOver() {
 }
 
 /* ---------------------------------------------------------------------- */
+/* TUTORIAL                                                                 */
+/* ---------------------------------------------------------------------- */
+const TUTORIAL_SLIDES = [
+  {
+    title: '🎯 Welcome, Pilot',
+    sub: 'Snap Ships Tactics: Duel — quick tutorial (8 steps)',
+    html: `
+      <p>You command the <b>🚀 Sabre XF-23 Fighter</b> against an AI-flown <b>👾 Scarab KLAW Interceptor</b>.</p>
+      <p>Ships take turns <b>activating</b> — rotate, move, and fire — until one ship's Hull hits 0.</p>
+      <div class="tut-diagram">
+        <div class="tut-row"><span class="tut-icon">🚀</span><span class="tut-desc">You pilot the Sabre — full manual control.</span></div>
+        <div class="tut-row"><span class="tut-icon">👾</span><span class="tut-desc">The Scarab is flown by the AI — watch it play, or tap Skip.</span></div>
+        <div class="tut-row"><span class="tut-icon">🏆</span><span class="tut-desc">Reduce the enemy's Hull to 0 to win.</span></div>
+      </div>
+      <p>Tap <b>Next</b> to continue, or close this anytime — reopen it later with the ❓ button.</p>`,
+  },
+  {
+    title: '🖥️ Reading Your Control Panel',
+    html: `
+      <p>Each ship's card at the top of the screen shows everything about it:</p>
+      <div class="tut-diagram">
+        <div class="tut-row"><span class="tut-icon">❤️</span><span><span class="tut-label">Hull bar</span> — <span class="tut-desc">your health. Reaches 0 and you're destroyed.</span></span></div>
+        <div class="tut-row"><span class="tut-icon">🛡️</span><span><span class="tut-label">Evasion pips</span> — <span class="tut-desc">how hard you are to hit. Resets every one of your activations, but carries over through the opponent's turn.</span></span></div>
+        <div class="tut-row"><span class="tut-icon">⚡</span><span><span class="tut-label">Power</span> — <span class="tut-desc">the fuel you spend to take actions.</span></span></div>
+        <div class="tut-row"><span class="tut-icon">🔫</span><span><span class="tut-label">Part chips</span> — <span class="tut-desc">your 6 equipped systems. Green border = ready. Cube dots = locked. Skull/greyed = disabled.</span></span></div>
+      </div>`,
+  },
+  {
+    title: '🔄 Your Activation, Step by Step',
+    html: `
+      <p>Every activation goes through the same 5 steps, in order:</p>
+      <div class="tut-flow">
+        <div class="tut-flow-step"><b>🛡️</b>Reset Evasion</div>
+        <span class="tut-arrow">➜</span>
+        <div class="tut-flow-step"><b>💨</b>Vent Step</div>
+        <span class="tut-arrow">➜</span>
+        <div class="tut-flow-step"><b>🧭</b>Movement</div>
+        <span class="tut-arrow">➜</span>
+        <div class="tut-flow-step"><b>🎯</b>Part Actions</div>
+        <span class="tut-arrow">➜</span>
+        <div class="tut-flow-step"><b>🏁</b>End</div>
+      </div>
+      <p>The game walks you through each step automatically — buttons for whatever you can currently do appear at the bottom of the screen.</p>`,
+  },
+  {
+    title: '💨 The Vent Step (the confusing one!)',
+    html: `
+      <p>Using a part's action puts <b>cubes</b> on that part card. <b>A part with any cubes on it is locked</b> — it can't act again until those cubes are removed.</p>
+      <div class="vent-demo">
+        <div class="vent-demo-col">
+          <div class="vent-demo-label">🔒 Locked</div>
+          <div class="part-chip" style="width:76px;display:inline-block;">
+            <div class="pcubes"><span class="cube-dot power"></span><span class="cube-dot power"></span><span class="cube-dot heat"></span></div>
+            🔫<span class="pname">Autocannon</span>
+          </div>
+          <div class="vent-demo-note">2⚡ + 1🔥 sitting on it</div>
+        </div>
+        <div class="vent-demo-arrow">💨<br>Vent</div>
+        <div class="vent-demo-col">
+          <div class="vent-demo-label">✅ Unlocked</div>
+          <div class="part-chip usable" style="width:76px;display:inline-block;">
+            <div class="pcubes"></div>
+            🔫<span class="pname">Autocannon</span>
+          </div>
+          <div class="vent-demo-note">Ready to fire again!</div>
+        </div>
+      </div>
+      <div class="vent-demo-legend">
+        <div><span class="cube-dot power"></span> <span><b>Power</b> cubes vent back to your ship's pool — you get to spend them again.</span></div>
+        <div><span class="cube-dot heat"></span> <span><b>Heat</b> cubes vent away to the supply and are just gone — that's the price of a big attack.</span></div>
+      </div>
+      <p>Each activation you may vent a limited number of cubes total, pulled from any parts, any mix of ⚡/🔥. Venting is optional — but it's the only way to unlock a part you want to use again.</p>`,
+  },
+  {
+    title: '🎲 Rolling to Hit',
+    html: `
+      <p>Attacks roll a handful of 10-sided dice. Each shows a number 1–8, a blank, or a critical star:</p>
+      <div class="dice-demo">
+        <div class="die hit">5</div><div class="die miss">2</div><div class="die miss">–</div><div class="die crit">★</div>
+      </div>
+      <div class="tut-diagram">
+        <div class="tut-row"><span class="tut-icon">🎯</span><span class="tut-desc"><b>Hit Number</b> = weapon accuracy + target's Evasion. Roll that number or higher to hit.</span></div>
+        <div class="tut-row"><span class="tut-icon">–</span><span class="tut-desc"><b>Blank</b> always misses, no matter what.</span></div>
+        <div class="tut-row"><span class="tut-icon">★</span><span class="tut-desc"><b>Critical</b> always hits — and disables one of the target's parts!</span></div>
+      </div>
+      <p>Attacking from a target's rear arc improves your odds and adds bonus damage — watch the log for Flank/Rear callouts.</p>`,
+  },
+  {
+    title: '💥 Critical Hits & Repairs',
+    html: `
+      <p>Every ★ you roll disables one of the target's parts.</p>
+      <div class="tut-diagram">
+        <div class="tut-row"><span class="tut-icon">💀</span><span class="tut-desc">A disabled part is greyed out and can't act.</span></div>
+        <div class="tut-row"><span class="tut-icon">🔧</span><span class="tut-desc">Spend power any time to <b>Repair</b> it — it comes back locked (cubes on it) until you vent again.</span></div>
+        <div class="tut-row"><span class="tut-icon">🔥</span><span class="tut-desc">If the disabled part had heat cubes on it, they explode for extra Hull damage!</span></div>
+      </div>
+      <p>Your Sabre's Cockpit ability lets <b>you</b> choose which part gets hit — but only until it takes its first critical.</p>`,
+  },
+  {
+    title: '☁️ Terrain & 🚀 Missiles',
+    html: `
+      <div class="tut-diagram">
+        <div class="tut-row"><span class="tut-icon">☁️</span><span class="tut-desc"><b>Debris Cloud</b> — flying into it gives you a free Evade 1.</span></div>
+        <div class="tut-row"><span class="tut-icon">❄️</span><span class="tut-desc"><b>Ice Cloud</b> — flying into it vents 1 cube from any part, free.</span></div>
+        <div class="tut-row"><span class="tut-icon">🌥️</span><span class="tut-desc">Both tiles give <b>Soft Cover</b>: +2 to a shooter's Hit Number if the shot crosses them.</span></div>
+        <div class="tut-row"><span class="tut-icon">🚀</span><span class="tut-desc">Missiles don't hit immediately — they land on the target and detonate at the end of that ship's <i>next</i> activation.</span></div>
+        <div class="tut-row"><span class="tut-icon">🛡️</span><span class="tut-desc">Some weapons can also fire in <b>Anti-Missile</b> mode to shoot incoming missiles down first.</span></div>
+      </div>`,
+  },
+  {
+    title: '🎮 Playing Your Turn',
+    html: `
+      <p>Whenever it's your move, buttons appear at the bottom of the screen — just tap the one you want:</p>
+      <div class="tut-diagram">
+        <div class="tut-row"><span class="tut-icon">👉</span><span class="tut-desc">Each button is one legal choice — a part's ability, a direction, a yes/no.</span></div>
+        <div class="tut-row"><span class="tut-icon">⏩</span><span class="tut-desc">When it's the Scarab's turn, watch it play or tap <b>Skip</b> to fast-forward.</span></div>
+        <div class="tut-row"><span class="tut-icon">❓</span><span class="tut-desc">Tap the help icon (top-right) anytime to reopen this guide mid-battle.</span></div>
+      </div>
+      <p>That's everything — good hunting, pilot. 🚀</p>`,
+  },
+];
+let tutorialIndex = 0;
+
+function openTutorial(index) {
+  tutorialIndex = index || 0;
+  $('tutorial-overlay').classList.remove('hidden');
+  renderTutorialSlide();
+}
+function closeTutorial() { $('tutorial-overlay').classList.add('hidden'); }
+function tutorialGo(delta) {
+  tutorialIndex = Math.max(0, Math.min(TUTORIAL_SLIDES.length - 1, tutorialIndex + delta));
+  renderTutorialSlide();
+}
+function renderTutorialSlide() {
+  const s = TUTORIAL_SLIDES[tutorialIndex];
+  $('tutorial-slide-content').innerHTML = `<h2>${s.title}</h2>${s.sub ? `<div class="tut-sub">${s.sub}</div>` : ''}${s.html}`;
+  $('tutorial-dots').innerHTML = TUTORIAL_SLIDES.map((_, i) => `<span class="${i === tutorialIndex ? 'active' : ''}"></span>`).join('');
+  $('btn-tutorial-prev').disabled = tutorialIndex === 0;
+  $('btn-tutorial-next').textContent = tutorialIndex === TUTORIAL_SLIDES.length - 1 ? "🚀 Let's Fly!" : 'Next ▶';
+}
+
+/* ---------------------------------------------------------------------- */
 /* BOOTSTRAP                                                                */
 /* ---------------------------------------------------------------------- */
 function startMatch() {
@@ -1096,4 +1249,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const muted = Sound.toggleMute();
     $('btn-mute').textContent = muted ? '🔇' : '🔊';
   });
+
+  $('btn-help').addEventListener('click', () => { Sound.click(); openTutorial(0); });
+  $('btn-tutorial-open').addEventListener('click', () => { Sound.click(); openTutorial(0); });
+  $('btn-tutorial-close').addEventListener('click', () => { Sound.click(); closeTutorial(); });
+  $('btn-tutorial-prev').addEventListener('click', () => { Sound.click(); tutorialGo(-1); });
+  $('btn-tutorial-next').addEventListener('click', () => {
+    Sound.click();
+    if (tutorialIndex === TUTORIAL_SLIDES.length - 1) closeTutorial();
+    else tutorialGo(1);
+  });
+  $('tutorial-overlay').addEventListener('click', (e) => { if (e.target.id === 'tutorial-overlay') closeTutorial(); });
+
+  // Open the tutorial automatically the first time the game loads.
+  openTutorial(0);
 });

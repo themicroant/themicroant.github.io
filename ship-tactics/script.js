@@ -1,6 +1,6 @@
 'use strict';
 /* ========================================================================
-   Snap Ships Tactics: Duel — engine
+   Ship Tactics: Duel — engine
    See docs/requirements.md for the full spec this implements.
    ======================================================================== */
 
@@ -1088,7 +1088,7 @@ function renderGameOver() {
 const TUTORIAL_SLIDES = [
   {
     title: '🎯 Welcome, Pilot',
-    sub: 'Snap Ships Tactics: Duel — quick tutorial (8 steps)',
+    sub: 'Ship Tactics: Duel — quick tutorial (8 steps)',
     html: `
       <p>You command the <b>🚀 Sabre XF-23 Fighter</b> against an AI-flown <b>👾 Scarab KLAW Interceptor</b>.</p>
       <p>Ships take turns <b>activating</b> — rotate, move, and fire — until one ship's Hull hits 0.</p>

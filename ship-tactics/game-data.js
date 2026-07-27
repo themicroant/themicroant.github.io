@@ -1,4 +1,4 @@
-// Snap Ships Tactics: Duel — static game data (ships, parts, missiles, terrain).
+// Ship Tactics: Duel — static game data (ships, parts, missiles, terrain).
 // Generated to match docs/requirements.md §5-6-10 and rules.md's Starter Box reference table.
 // Edit via admin/index.html, which Exports back to this exact file shape.
 "use strict";

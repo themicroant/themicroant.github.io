@@ -30,6 +30,10 @@ const state = {
   pendingTarget: null, // {x,y} attack/heal target awaiting a confirming second click
   inspectId: null, // unit id shown read-only in the info panel (no activation)
   flashTile: null, // {x,y,color,until} brief tile flash on a resolved attack/heal
+  unitAnim: {}, // unitId -> {type, start, until} transient per-sprite animation (lunge/hurt/dodge/cast/heal-glow)
+  floatingTexts: [], // [{x,y,text,color,start,until}] damage/heal/miss numbers drifting up off a tile
+  projectile: null, // {x1,y1,x2,y2,color,start,until} traveling dot for ranged attacks
+  actionLocked: false, // true while an attack/heal animation sequence is resolving
   cursor: { x: 0, y: 0 },
   log: [],
   outcome: null, // "victory" | "defeat"
@@ -65,6 +69,65 @@ function manhattan(a, b) {
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
+}
+
+// ---------------------------------------------------------------------------
+// Animation system: transient per-sprite animations (unitAnim), floating combat text,
+// a ranged-attack projectile, and a continuous redraw loop that runs only while any of
+// those are active. Combat/heal resolution schedules these and sequences its own timing
+// off setTimeout; this loop's only job is to keep the canvas repainting in between so the
+// motion is visible (see drawBoard for how each animation type is actually rendered).
+// ---------------------------------------------------------------------------
+
+function setUnitAnim(unitId, type, duration, extra) {
+  state.unitAnim[unitId] = { type, start: Date.now(), until: Date.now() + duration, ...extra };
+  ensureAnimLoop();
+}
+
+function addFloatingText(x, y, text, color, duration = 700) {
+  state.floatingTexts.push({ x, y, text, color, start: Date.now(), until: Date.now() + duration });
+  ensureAnimLoop();
+}
+
+function setProjectile(x1, y1, x2, y2, color, duration) {
+  state.projectile = { x1, y1, x2, y2, color, start: Date.now(), until: Date.now() + duration };
+  ensureAnimLoop();
+}
+
+function pruneAnimations() {
+  const t = Date.now();
+  for (const id of Object.keys(state.unitAnim)) {
+    if (t >= state.unitAnim[id].until) delete state.unitAnim[id];
+  }
+  state.floatingTexts = state.floatingTexts.filter((f) => t < f.until);
+  if (state.projectile && t >= state.projectile.until) state.projectile = null;
+  if (state.flashTile && t >= state.flashTile.until) state.flashTile = null;
+}
+
+function hasActiveAnimations() {
+  return (
+    Object.keys(state.unitAnim).length > 0 ||
+    state.floatingTexts.length > 0 ||
+    state.projectile != null ||
+    state.flashTile != null
+  );
+}
+
+let animLoopRunning = false;
+
+function ensureAnimLoop() {
+  if (animLoopRunning) return;
+  animLoopRunning = true;
+  const tick = () => {
+    pruneAnimations();
+    if (state.screen === "battle") drawBoard();
+    if (hasActiveAnimations()) {
+      requestAnimationFrame(tick);
+    } else {
+      animLoopRunning = false;
+    }
+  };
+  requestAnimationFrame(tick);
 }
 
 // Dijkstra over terrain cost. Allies are passable (you can path through a teammate) but never
@@ -172,58 +235,121 @@ function attackRoll(attacker, defender) {
 
 function triggerFlash(x, y, color, duration = 220) {
   state.flashTile = { x, y, color, until: Date.now() + duration };
-  render();
-  setTimeout(() => {
-    if (state.flashTile && state.flashTile.until <= Date.now()) {
-      state.flashTile = null;
-      render();
-    }
-  }, duration + 20);
+  ensureAnimLoop();
 }
 
-function resolveCombat(attacker, defender) {
-  const result = attackRoll(attacker, defender);
-  if (result.hits) {
-    Sound.hit();
-    if (result.crit) Sound.crit();
-    addLog(`${attacker.name} hits ${defender.name} for ${result.dmg}${result.crit ? " (crit!)" : ""}.`);
-    triggerFlash(defender.x, defender.y, result.crit ? "rgba(240,198,116,0.65)" : "rgba(255,255,255,0.55)");
+const MELEE_NUDGE = 15; // px an attacker's sprite lunges toward an adjacent target
+const WINDUP_MS = 170; // time from a strike starting to it landing (impact)
+const RECOVER_MS = 170; // time from impact back to rest
+const COUNTER_GAP_MS = 160; // pause between an attack landing and a counter beginning
+
+// Plays one strike: the attacker lunges (melee) or fires a projectile (ranged) toward the
+// defender, calls onImpact() at the moment it lands (apply damage/rolls here), then eases
+// back to rest before calling onFinished(). Both directions of a counterattack reuse this.
+function playStrike(attacker, defender, onImpact, onFinished) {
+  const dist = manhattan(attacker, defender);
+  if (dist <= 1) {
+    const sx = Math.sign(defender.x - attacker.x);
+    const sy = Math.sign(defender.y - attacker.y);
+    setUnitAnim(attacker.id, "lunge", WINDUP_MS + RECOVER_MS, { dx: sx * MELEE_NUDGE, dy: sy * MELEE_NUDGE, windup: WINDUP_MS });
   } else {
-    Sound.miss();
-    addLog(`${attacker.name} misses ${defender.name}.`);
+    const color = attacker.magic ? "rgba(180,120,220,0.9)" : "rgba(240,198,116,0.9)";
+    setProjectile(
+      attacker.x * TILE + TILE / 2,
+      attacker.y * TILE + TILE / 2,
+      defender.x * TILE + TILE / 2,
+      defender.y * TILE + TILE / 2,
+      color,
+      WINDUP_MS
+    );
   }
-  if (defender.hp <= 0) {
-    addLog(`${defender.name} is defeated!`);
-  } else {
-    const d = manhattan(attacker, defender);
-    if (defender.heal == null && d >= defender.rangeMin && d <= defender.rangeMax) {
-      const counter = attackRoll(defender, attacker);
-      if (counter.hits) {
+  setTimeout(() => {
+    onImpact();
+  }, WINDUP_MS);
+  setTimeout(() => {
+    onFinished();
+  }, WINDUP_MS + RECOVER_MS);
+}
+
+function resolveCombat(attacker, defender, onDone) {
+  playStrike(
+    attacker,
+    defender,
+    () => {
+      const result = attackRoll(attacker, defender);
+      if (result.hits) {
         Sound.hit();
-        if (counter.crit) Sound.crit();
-        addLog(`${defender.name} counters ${attacker.name} for ${counter.dmg}${counter.crit ? " (crit!)" : ""}.`);
-        triggerFlash(attacker.x, attacker.y, counter.crit ? "rgba(240,198,116,0.65)" : "rgba(255,255,255,0.55)");
+        if (result.crit) Sound.crit();
+        addLog(`${attacker.name} hits ${defender.name} for ${result.dmg}${result.crit ? " (crit!)" : ""}.`);
+        triggerFlash(defender.x, defender.y, result.crit ? "rgba(240,198,116,0.65)" : "rgba(255,255,255,0.55)");
+        addFloatingText(defender.x, defender.y, `-${result.dmg}`, result.crit ? "#f0c674" : "#e8f0ea");
+        setUnitAnim(defender.id, "hurt", 260);
       } else {
         Sound.miss();
-        addLog(`${defender.name}'s counter misses.`);
+        addLog(`${attacker.name} misses ${defender.name}.`);
+        addFloatingText(defender.x, defender.y, "MISS", "#9fc4ac");
+        setUnitAnim(defender.id, "dodge", 260);
       }
-      if (attacker.hp <= 0) addLog(`${attacker.name} is defeated!`);
+      if (defender.hp <= 0) addLog(`${defender.name} is defeated!`);
+    },
+    () => {
+      if (defender.hp <= 0) {
+        onDone();
+        return;
+      }
+      const d = manhattan(attacker, defender);
+      if (defender.heal != null || d < defender.rangeMin || d > defender.rangeMax) {
+        onDone();
+        return;
+      }
+      setTimeout(() => {
+        playStrike(
+          defender,
+          attacker,
+          () => {
+            const counter = attackRoll(defender, attacker);
+            if (counter.hits) {
+              Sound.hit();
+              if (counter.crit) Sound.crit();
+              addLog(`${defender.name} counters ${attacker.name} for ${counter.dmg}${counter.crit ? " (crit!)" : ""}.`);
+              triggerFlash(attacker.x, attacker.y, counter.crit ? "rgba(240,198,116,0.65)" : "rgba(255,255,255,0.55)");
+              addFloatingText(attacker.x, attacker.y, `-${counter.dmg}`, counter.crit ? "#f0c674" : "#e8f0ea");
+              setUnitAnim(attacker.id, "hurt", 260);
+            } else {
+              Sound.miss();
+              addLog(`${defender.name}'s counter misses.`);
+              addFloatingText(attacker.x, attacker.y, "MISS", "#9fc4ac");
+              setUnitAnim(attacker.id, "dodge", 260);
+            }
+            if (attacker.hp <= 0) addLog(`${attacker.name} is defeated!`);
+          },
+          onDone
+        );
+      }, COUNTER_GAP_MS);
     }
-  }
+  );
 }
 
-function resolveHeal(healer, ally) {
-  const amount = Math.min(healer.heal, ally.hpMax - ally.hp);
-  ally.hp += amount;
-  Sound.heal();
-  addLog(`${healer.name} heals ${ally.name} for ${amount}.`);
-  triggerFlash(ally.x, ally.y, "rgba(126,201,143,0.6)");
+function resolveHeal(healer, ally, onDone) {
+  setUnitAnim(healer.id, "cast", 300);
+  setTimeout(() => {
+    const amount = Math.min(healer.heal, ally.hpMax - ally.hp);
+    ally.hp += amount;
+    Sound.heal();
+    addLog(`${healer.name} heals ${ally.name} for ${amount}.`);
+    triggerFlash(ally.x, ally.y, "rgba(126,201,143,0.6)");
+    addFloatingText(ally.x, ally.y, `+${amount}`, "#7ec98f");
+    setUnitAnim(ally.id, "heal-glow", 450);
+  }, 220);
+  setTimeout(onDone, 480);
 }
 
 function applyAction(sel, targetUnit) {
-  if (sel.heal != null) resolveHeal(sel, targetUnit);
-  else resolveCombat(sel, targetUnit);
-  finishUnitTurn(sel);
+  state.actionLocked = true;
+  render();
+  const onDone = () => finishUnitTurn(sel);
+  if (sel.heal != null) resolveHeal(sel, targetUnit, onDone);
+  else resolveCombat(sel, targetUnit, onDone);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,6 +390,7 @@ function deselect() {
 }
 
 function finishUnitTurn(unit) {
+  state.actionLocked = false;
   unit.acted = true;
   deselect();
   render();
@@ -274,7 +401,7 @@ function finishUnitTurn(unit) {
 }
 
 function onBoardClick(x, y) {
-  if (state.screen !== "battle" || state.phase !== "player") return;
+  if (state.screen !== "battle" || state.phase !== "player" || state.actionLocked) return;
   const clicked = unitAt(x, y);
 
   // Nothing is mid-activation: select an available unit, inspect anything else read-only,
@@ -301,6 +428,8 @@ function onBoardClick(x, y) {
       // attack/heal together in this one click.
       sel.x = state.previewPos.x;
       sel.y = state.previewPos.y;
+      state.previewPos = null;
+      state.moved = true;
       Sound.move();
       applyAction(sel, targetUnit);
       return;
@@ -356,13 +485,14 @@ function onBoardClick(x, y) {
 }
 
 function waitSelected() {
+  if (state.actionLocked) return;
   const sel = getSelected();
   if (!sel) return;
   finishUnitTurn(sel);
 }
 
 function endTurnClicked() {
-  if (state.phase !== "player" || state.screen !== "battle") return;
+  if (state.phase !== "player" || state.screen !== "battle" || state.actionLocked) return;
   deselect();
   startEnemyPhase();
 }
@@ -461,11 +591,18 @@ function performEnemyAction(unit, onDone) {
 
   const path = reconstructPath(prev, { x: unit.x, y: unit.y }, key(destX, destY));
   animateAlongPath(unit, path, 0, () => {
-    if (willAttack) resolveCombat(unit, willAttack);
-    else addLog(`${unit.name} moves closer.`);
-    unit.acted = true;
-    render();
-    onDone();
+    if (willAttack) {
+      resolveCombat(unit, willAttack, () => {
+        unit.acted = true;
+        render();
+        onDone();
+      });
+    } else {
+      addLog(`${unit.name} moves closer.`);
+      unit.acted = true;
+      render();
+      onDone();
+    }
   });
 }
 
@@ -518,6 +655,10 @@ function resetBattle() {
   state.log = [];
   state.inspectId = null;
   state.flashTile = null;
+  state.unitAnim = {};
+  state.floatingTexts = [];
+  state.projectile = null;
+  state.actionLocked = false;
   deselect();
   state.cursor = { x: 0, y: 0 };
 }
@@ -554,6 +695,35 @@ function loadImages(cb) {
 // ---------------------------------------------------------------------------
 
 let canvas, ctx;
+
+// Translates a unit's active animation (if any) into a per-frame sprite offset/glow, based on
+// elapsed time since it was scheduled. See setUnitAnim call sites for what schedules each type.
+function getUnitAnimOffset(u) {
+  const anim = state.unitAnim[u.id];
+  if (!anim) return { dx: 0, dy: 0, glow: null };
+  const t = Date.now() - anim.start;
+  const total = anim.until - anim.start;
+  const progress = clamp(t / total, 0, 1);
+  if (anim.type === "lunge") {
+    const windup = anim.windup || total / 2;
+    const p = clamp(t <= windup ? t / windup : 1 - (t - windup) / Math.max(1, total - windup), 0, 1);
+    return { dx: anim.dx * p, dy: anim.dy * p, glow: null };
+  }
+  if (anim.type === "hurt") {
+    const shake = Math.sin(t / 22) * 5 * (1 - progress);
+    return { dx: shake, dy: 0, glow: null };
+  }
+  if (anim.type === "dodge") {
+    return { dx: 0, dy: -Math.sin(progress * Math.PI) * 10, glow: null };
+  }
+  if (anim.type === "cast") {
+    return { dx: 0, dy: -Math.sin(progress * Math.PI) * 6, glow: "rgba(150,220,240,0.35)" };
+  }
+  if (anim.type === "heal-glow") {
+    return { dx: 0, dy: 0, glow: "rgba(126,201,143,0.4)" };
+  }
+  return { dx: 0, dy: 0, glow: null };
+}
 
 function drawBoard() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -607,8 +777,17 @@ function drawBoard() {
 
   for (const u of state.units) {
     if (u.hp <= 0) continue;
+    const anim = getUnitAnimOffset(u);
+    if (anim.glow) {
+      ctx.fillStyle = anim.glow;
+      ctx.beginPath();
+      ctx.arc(u.x * TILE + TILE / 2, u.y * TILE + TILE / 2, TILE * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+    }
     const img = images[u.icon];
-    if (img && img.complete) ctx.drawImage(img, u.x * TILE + 4, u.y * TILE + 4, TILE - 8, TILE - 8);
+    if (img && img.complete) {
+      ctx.drawImage(img, u.x * TILE + anim.dx + 4, u.y * TILE + anim.dy + 4, TILE - 8, TILE - 8);
+    }
     if (u.acted) {
       ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.fillRect(u.x * TILE, u.y * TILE, TILE, TILE);
@@ -649,6 +828,30 @@ function drawBoard() {
     ctx.strokeRect(state.pendingTarget.x * TILE + 3, state.pendingTarget.y * TILE + 3, TILE - 6, TILE - 6);
   }
 
+  // Ranged-attack projectile, traveling from attacker to defender across the windup.
+  if (state.projectile) {
+    const p = state.projectile;
+    const t = clamp((Date.now() - p.start) / Math.max(1, p.until - p.start), 0, 1);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x1 + (p.x2 - p.x1) * t, p.y1 + (p.y2 - p.y1) * t, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Floating damage/heal/miss text drifting up and fading over a resolved action's tile.
+  if (state.floatingTexts.length) {
+    ctx.textAlign = "center";
+    ctx.font = "bold 15px 'Trebuchet MS', sans-serif";
+    for (const f of state.floatingTexts) {
+      const t = clamp((Date.now() - f.start) / Math.max(1, f.until - f.start), 0, 1);
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x * TILE + TILE / 2, f.y * TILE + TILE / 2 - 18 * t);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+  }
+
   // Read-only inspection highlight (no active selection).
   if (!sel && state.inspectId) {
     const u = state.units.find((x) => x.id === state.inspectId && x.hp > 0);
@@ -683,7 +886,8 @@ function renderHud() {
   const sel = getSelected();
   if (sel) {
     let hint;
-    if (state.pendingTarget) hint = "Click the target again to confirm, or Wait.";
+    if (state.actionLocked) hint = "Resolving…";
+    else if (state.pendingTarget) hint = "Click the target again to confirm, or Wait.";
     else if (state.previewPos) hint = "Click again to move, or click a target to move + act.";
     else if (state.moved) hint = "Choose a target, or Wait.";
     else hint = "Move to a tile, or click a red target to act in place.";
@@ -722,8 +926,8 @@ function renderHud() {
   logEl.innerHTML = state.log.slice(-5).map((l) => `<div>${l}</div>`).join("");
   logEl.scrollTop = logEl.scrollHeight;
 
-  document.getElementById("wait-btn").disabled = !(state.phase === "player" && state.selectedId);
-  document.getElementById("end-turn-btn").disabled = state.phase !== "player";
+  document.getElementById("wait-btn").disabled = state.actionLocked || !(state.phase === "player" && state.selectedId);
+  document.getElementById("end-turn-btn").disabled = state.actionLocked || state.phase !== "player";
 }
 
 function renderResult() {
@@ -764,7 +968,7 @@ function canvasToTile(clientX, clientY) {
 }
 
 function handleKey(e) {
-  if (state.screen !== "battle" || state.phase !== "player") return;
+  if (state.screen !== "battle" || state.phase !== "player" || state.actionLocked) return;
   const c = state.cursor;
   switch (e.key) {
     case "ArrowUp":

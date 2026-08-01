@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>⚔️ Fire Tactics</title>
+<style>
+:root {
+  --bg-0: #0c1210;
+  --bg-1: #152420;
+  --bg-2: #1d332c;
+  --bg-3: #2a4a3f;
+  --accent: #f0c674;
+  --text: #e8f0ea;
+  --text-dim: #9fc4ac;
+  --border: #3d6656;
+  --danger: #e0555e;
+  --good: #7ec98f;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+#app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  gap: 12px;
+}
+.hidden { display: none !important; }
+.panel {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 560px;
+  width: 100%;
+  text-align: center;
+}
+.panel h1 {
+  color: var(--accent);
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+.panel p {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  margin-top: 12px;
+}
+button:hover:not(:disabled) { background: var(--bg-3); border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+
+#battle-screen {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+#hud .spacer { flex: 1; }
+#phase-label { color: var(--accent); font-weight: bold; }
+#turn-label { color: var(--text-dim); font-size: 0.9rem; }
+#mute-btn { margin: 0; padding: 4px 10px; }
+
+#board-wrap {
+  width: 100%;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-1);
+  line-height: 0;
+}
+#board {
+  width: 100%;
+  height: auto;
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+
+#unit-info {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  min-height: 20px;
+}
+#unit-info strong { color: var(--accent); }
+#unit-info .stat-row { display: block; color: var(--text-dim); font-size: 0.82rem; margin-top: 2px; }
+#unit-info .hint { display: block; color: var(--text-dim); font-size: 0.82rem; margin-top: 4px; font-style: italic; }
+
+#squad-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.portrait {
+  flex: 0 0 auto;
+  width: 64px;
+  text-align: center;
+  background: var(--bg-1);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  font-size: 0.7rem;
+}
+.portrait img { width: 40px; height: 40px; }
+.portrait.active { border-color: var(--accent); }
+.portrait.acted { opacity: 0.45; }
+.portrait.dead { opacity: 0.25; filter: grayscale(1); }
+.pname { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pbar { background: #1a1e1c; border-radius: 3px; height: 5px; margin-top: 2px; overflow: hidden; }
+.pbar-fill { background: var(--good); height: 100%; }
+
+#actions { display: flex; gap: 8px; }
+#actions button { margin-top: 0; flex: 1; }
+
+#battle-log {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  height: 90px;
+  overflow-y: auto;
+}
+
+#result-banner { font-size: 1.8rem; margin-bottom: 8px; }
+#result-banner.win { color: var(--good); }
+#result-banner.lose { color: var(--danger); }
+
+@media (max-width: 360px) {
+  .panel { padding: 14px; }
+  #app { padding: 10px; gap: 8px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="title-screen" class="screen panel">
+    <h1>⚔️ Fire Tactics</h1>
+    <p>A grid tactics skirmish. Move your squad across forest and mountain terrain, trade blows
+      with a counterattack system, and defeat all four enemies to win.</p>
+    <p><strong>Objective:</strong> Defeat all four enemies.</p>
+    <button id="begin-btn">Begin Battle</button>
+  </div>
+
+  <div id="battle-screen" class="screen hidden">
+    <div id="hud">
+      <span id="phase-label">Player Phase</span>
+      <span id="turn-label">Turn 1</span>
+      <span class="spacer"></span>
+      <button id="mute-btn" data-muted="false">🔊</button>
+    </div>
+    <div id="board-wrap">
+      <canvas id="board" width="512" height="384"></canvas>
+    </div>
+    <div id="unit-info"></div>
+    <div id="squad-strip"></div>
+    <div id="actions">
+      <button id="wait-btn" disabled>Wait</button>
+      <button id="end-turn-btn">End Turn</button>
+    </div>
+    <div id="battle-log"></div>
+  </div>
+
+  <div id="result-screen" class="screen hidden panel">
+    <div id="result-banner"></div>
+    <p id="result-recap"></p>
+    <button id="play-again-btn">Play Again</button>
+  </div>
+
+</div>
+<script src="game-data.js"></script>
+<script src="sound.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

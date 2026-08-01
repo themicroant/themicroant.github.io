@@ -112,7 +112,8 @@ button:disabled { opacity: 0.4; cursor: default; }
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 0.9rem;
-  min-height: 20px;
+  height: 86px;
+  overflow: hidden;
 }
 #unit-info strong { color: var(--accent); }
 #unit-info .stat-row { display: block; color: var(--text-dim); font-size: 0.82rem; margin-top: 2px; }
@@ -184,10 +185,10 @@ button:disabled { opacity: 0.4; cursor: default; }
       <span class="spacer"></span>
       <button id="mute-btn" data-muted="false">🔊</button>
     </div>
+    <div id="unit-info"></div>
     <div id="board-wrap">
       <canvas id="board" width="512" height="384"></canvas>
     </div>
-    <div id="unit-info"></div>
     <div id="squad-strip"></div>
     <div id="actions">
       <button id="wait-btn" disabled>Wait</button>

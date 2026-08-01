@@ -1,4 +1,11 @@
 // Fire Tactics — engine + game logic. Loaded after game-data.js and sound.js.
+//
+// Interaction model follows the click-select/click-confirm pattern documented in the
+// codex-tactics reference project (docs/game/design.md, docs/game/requirements.md):
+// a first click on a reachable tile previews the move (ghost sprite + path line), a second
+// click on that same tile confirms it; attack targets follow the same select-then-confirm
+// pattern, except clicking a highlighted enemy while a move is still previewed resolves the
+// move and the attack together in one click. See docs/requirements.md §4.4 for the full spec.
 "use strict";
 
 const TILE = 64;
@@ -13,9 +20,16 @@ const state = {
   phase: "player", // "player" | "enemy"
   turnCount: 1,
   selectedId: null,
-  mode: null, // null | "move" | "target"
-  reachable: null, // Map "x,y" -> move cost
-  targets: [], // [{x,y}]
+  mode: null, // null | "acting" (a unit is mid-activation)
+  reachable: null, // Map "x,y" -> move cost, from the unit's position at selection time
+  prevMap: null, // Map "x,y" -> parent "x,y", for path reconstruction
+  originPos: null, // {x,y} unit's position when selected, before any tentative move
+  previewPos: null, // {x,y} tentative move destination, not yet confirmed
+  moved: false, // whether this activation's move step has been resolved (moved or skip-moved)
+  attackTargets: [], // [{x,y}] valid attack/heal targets from the current-or-previewed position
+  pendingTarget: null, // {x,y} attack/heal target awaiting a confirming second click
+  inspectId: null, // unit id shown read-only in the info panel (no activation)
+  flashTile: null, // {x,y,color,until} brief tile flash on a resolved attack/heal
   cursor: { x: 0, y: 0 },
   log: [],
   outcome: null, // "victory" | "defeat"
@@ -53,8 +67,12 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
+// Dijkstra over terrain cost. Allies are passable (you can path through a teammate) but never
+// a valid tile to end movement on; enemies block pathing entirely. Returns both the cost map
+// and a parent-pointer map so a path can be reconstructed for the move-preview line.
 function computeReachable(unit) {
   const dist = new Map();
+  const prev = new Map();
   dist.set(key(unit.x, unit.y), 0);
   const queue = [[unit.x, unit.y, 0]];
   while (queue.length) {
@@ -68,32 +86,54 @@ function computeReachable(unit) {
       const terrain = terrainAt(nx, ny);
       if (!terrain.passable) continue;
       const occ = unitAt(nx, ny);
-      if (occ && occ.id !== unit.id) continue;
+      if (occ && occ.team !== unit.team) continue; // enemies block pathing
       const nCost = cost + terrain.moveCost;
       if (nCost > unit.mov) continue;
       const nk = key(nx, ny);
       if (!dist.has(nk) || dist.get(nk) > nCost) {
         dist.set(nk, nCost);
+        prev.set(nk, key(x, y));
         queue.push([nx, ny, nCost]);
       }
     }
   }
-  return dist;
+  return { dist, prev };
 }
 
-function computeTargets(unit) {
+// A reachable tile is only a legal place to *end* movement if nothing else occupies it.
+function isValidEndTile(x, y, unit) {
+  const occ = unitAt(x, y);
+  return !occ || occ.id === unit.id;
+}
+
+function reconstructPath(prev, origin, destKey) {
+  const path = [];
+  let curKey = destKey;
+  const originKey = key(origin.x, origin.y);
+  let guard = 0;
+  while (curKey && curKey !== originKey && guard < 200) {
+    const [x, y] = curKey.split(",").map(Number);
+    path.unshift({ x, y });
+    curKey = prev.get(curKey);
+    guard++;
+  }
+  path.unshift({ x: origin.x, y: origin.y });
+  return path;
+}
+
+function computeTargetsFrom(unit, pos) {
   const targets = [];
   if (unit.heal != null) {
     for (const ally of state.units) {
       if (ally.team !== unit.team || ally.hp <= 0 || ally.id === unit.id) continue;
       if (ally.hp >= ally.hpMax) continue;
-      const d = manhattan(unit, ally);
+      const d = Math.abs(pos.x - ally.x) + Math.abs(pos.y - ally.y);
       if (d >= unit.rangeMin && d <= unit.rangeMax) targets.push({ x: ally.x, y: ally.y });
     }
   } else {
     for (const foe of state.units) {
       if (foe.team === unit.team || foe.hp <= 0) continue;
-      const d = manhattan(unit, foe);
+      const d = Math.abs(pos.x - foe.x) + Math.abs(pos.y - foe.y);
       if (d >= unit.rangeMin && d <= unit.rangeMax) targets.push({ x: foe.x, y: foe.y });
     }
   }
@@ -130,12 +170,24 @@ function attackRoll(attacker, defender) {
   return { hits, dmg, crit };
 }
 
+function triggerFlash(x, y, color, duration = 220) {
+  state.flashTile = { x, y, color, until: Date.now() + duration };
+  render();
+  setTimeout(() => {
+    if (state.flashTile && state.flashTile.until <= Date.now()) {
+      state.flashTile = null;
+      render();
+    }
+  }, duration + 20);
+}
+
 function resolveCombat(attacker, defender) {
   const result = attackRoll(attacker, defender);
   if (result.hits) {
     Sound.hit();
     if (result.crit) Sound.crit();
     addLog(`${attacker.name} hits ${defender.name} for ${result.dmg}${result.crit ? " (crit!)" : ""}.`);
+    triggerFlash(defender.x, defender.y, result.crit ? "rgba(240,198,116,0.65)" : "rgba(255,255,255,0.55)");
   } else {
     Sound.miss();
     addLog(`${attacker.name} misses ${defender.name}.`);
@@ -150,6 +202,7 @@ function resolveCombat(attacker, defender) {
         Sound.hit();
         if (counter.crit) Sound.crit();
         addLog(`${defender.name} counters ${attacker.name} for ${counter.dmg}${counter.crit ? " (crit!)" : ""}.`);
+        triggerFlash(attacker.x, attacker.y, counter.crit ? "rgba(240,198,116,0.65)" : "rgba(255,255,255,0.55)");
       } else {
         Sound.miss();
         addLog(`${defender.name}'s counter misses.`);
@@ -164,6 +217,13 @@ function resolveHeal(healer, ally) {
   ally.hp += amount;
   Sound.heal();
   addLog(`${healer.name} heals ${ally.name} for ${amount}.`);
+  triggerFlash(ally.x, ally.y, "rgba(126,201,143,0.6)");
+}
+
+function applyAction(sel, targetUnit) {
+  if (sel.heal != null) resolveHeal(sel, targetUnit);
+  else resolveCombat(sel, targetUnit);
+  finishUnitTurn(sel);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,9 +237,16 @@ function addLog(msg) {
 
 function selectUnit(unit) {
   state.selectedId = unit.id;
-  state.mode = "move";
-  state.reachable = computeReachable(unit);
-  state.targets = [];
+  state.mode = "acting";
+  state.originPos = { x: unit.x, y: unit.y };
+  const { dist, prev } = computeReachable(unit);
+  state.reachable = dist;
+  state.prevMap = prev;
+  state.previewPos = null;
+  state.moved = false;
+  state.pendingTarget = null;
+  state.attackTargets = computeTargetsFrom(unit, state.originPos);
+  state.inspectId = null;
   Sound.select();
   render();
 }
@@ -188,13 +255,12 @@ function deselect() {
   state.selectedId = null;
   state.mode = null;
   state.reachable = null;
-  state.targets = [];
-}
-
-function enterTargetMode(unit) {
-  state.mode = "target";
-  state.targets = computeTargets(unit);
-  render();
+  state.prevMap = null;
+  state.originPos = null;
+  state.previewPos = null;
+  state.moved = false;
+  state.attackTargets = [];
+  state.pendingTarget = null;
 }
 
 function finishUnitTurn(unit) {
@@ -211,40 +277,82 @@ function onBoardClick(x, y) {
   if (state.screen !== "battle" || state.phase !== "player") return;
   const clicked = unitAt(x, y);
 
+  // Nothing is mid-activation: select an available unit, inspect anything else read-only,
+  // or clear a previous inspection by clicking empty ground.
   if (state.mode === null) {
-    if (clicked && clicked.team === "player" && !clicked.acted) selectUnit(clicked);
+    if (clicked && clicked.team === "player" && clicked.hp > 0 && !clicked.acted) {
+      selectUnit(clicked);
+    } else {
+      state.inspectId = clicked ? clicked.id : null;
+      render();
+    }
     return;
   }
 
   const sel = getSelected();
   if (!sel) return;
+  const k = key(x, y);
+  const targetHit = state.attackTargets.find((t) => t.x === x && t.y === y);
 
-  if (state.mode === "move") {
-    const k = key(x, y);
-    if (state.reachable.has(k) && (!clicked || clicked.id === sel.id)) {
+  if (targetHit) {
+    const targetUnit = unitAt(x, y);
+    if (state.previewPos) {
+      // Combo: a target click while a move is still previewed confirms the move AND the
+      // attack/heal together in this one click.
+      sel.x = state.previewPos.x;
+      sel.y = state.previewPos.y;
+      Sound.move();
+      applyAction(sel, targetUnit);
+      return;
+    }
+    if (state.pendingTarget && state.pendingTarget.x === x && state.pendingTarget.y === y) {
+      // Second click on the same target: confirm.
+      applyAction(sel, targetUnit);
+      return;
+    }
+    // First click on a target with no move previewed: skip-move (stay put) and await the
+    // confirming second click.
+    state.moved = true;
+    state.previewPos = null;
+    state.pendingTarget = { x, y };
+    render();
+    return;
+  }
+
+  if (!state.moved && state.reachable.has(k) && isValidEndTile(x, y, sel)) {
+    if (state.previewPos && state.previewPos.x === x && state.previewPos.y === y) {
+      // Second click on the same previewed tile: confirm the move.
       sel.x = x;
       sel.y = y;
+      state.moved = true;
+      state.previewPos = null;
       Sound.move();
-      enterTargetMode(sel);
-    } else {
-      deselect();
-      if (clicked && clicked.team === "player" && !clicked.acted) selectUnit(clicked);
-      else render();
+      state.attackTargets = computeTargetsFrom(sel, { x, y });
+      render();
+      return;
     }
+    // First click (or a different reachable tile): (re)preview this destination.
+    state.previewPos = { x, y };
+    state.pendingTarget = null;
+    state.attackTargets = computeTargetsFrom(sel, { x, y });
+    render();
     return;
   }
 
-  if (state.mode === "target") {
-    const target = state.targets.find((t) => t.x === x && t.y === y);
-    if (target) {
-      if (sel.heal != null) resolveHeal(sel, unitAt(target.x, target.y));
-      else resolveCombat(sel, unitAt(target.x, target.y));
-      finishUnitTurn(sel);
-    } else if (clicked && clicked.id === sel.id) {
-      finishUnitTurn(sel);
+  if (!state.previewPos && !state.pendingTarget && !state.moved) {
+    // Still in the initial choosing state (nothing committed yet) — a stray click here is
+    // treated as switching selection or deselecting, same as the top-level click handling.
+    deselect();
+    if (clicked && clicked.team === "player" && clicked.hp > 0 && !clicked.acted) {
+      selectUnit(clicked);
+    } else {
+      state.inspectId = clicked ? clicked.id : null;
+      render();
     }
     return;
   }
+  // Once a move or target is mid-confirmation, invalid clicks are ignored rather than
+  // discarding the in-progress choice.
 }
 
 function waitSelected() {
@@ -288,20 +396,23 @@ function runEnemyUnit(i, list) {
     runEnemyUnit(i + 1, list);
     return;
   }
-  performEnemyAction(unit);
-  render();
-  checkVictoryDefeat();
-  if (state.screen === "result") return;
-  setTimeout(() => runEnemyUnit(i + 1, list), 650);
+  performEnemyAction(unit, () => {
+    checkVictoryDefeat();
+    if (state.screen === "result") return;
+    setTimeout(() => runEnemyUnit(i + 1, list), 350);
+  });
 }
 
-function performEnemyAction(unit) {
-  const reachable = computeReachable(unit);
+// Picks a target/destination, then animates the unit stepping along the path tile-by-tile
+// before resolving combat, so enemy movement reads as motion rather than a teleport.
+function performEnemyAction(unit, onDone) {
+  const { dist: reachable, prev } = computeReachable(unit);
   const players = state.units.filter((u) => u.team === "player" && u.hp > 0);
 
   let best = null; // { x, y, cost, target, score }
   for (const [k, cost] of reachable.entries()) {
     const [x, y] = k.split(",").map(Number);
+    if (!isValidEndTile(x, y, unit)) continue;
     for (const p of players) {
       const d = Math.abs(p.x - x) + Math.abs(p.y - y);
       if (d < unit.rangeMin || d > unit.rangeMax) continue;
@@ -314,10 +425,13 @@ function performEnemyAction(unit) {
     }
   }
 
+  let destX = unit.x;
+  let destY = unit.y;
+  let willAttack = null;
   if (best) {
-    unit.x = best.x;
-    unit.y = best.y;
-    resolveCombat(unit, best.target);
+    destX = best.x;
+    destY = best.y;
+    willAttack = best.target;
   } else if (players.length > 0) {
     let closest = players[0];
     let bestDist = Infinity;
@@ -332,6 +446,7 @@ function performEnemyAction(unit) {
     let bestD = Infinity;
     for (const k of reachable.keys()) {
       const [x, y] = k.split(",").map(Number);
+      if (!isValidEndTile(x, y, unit)) continue;
       const d = Math.abs(closest.x - x) + Math.abs(closest.y - y);
       if (d < bestD) {
         bestD = d;
@@ -339,12 +454,34 @@ function performEnemyAction(unit) {
       }
     }
     if (bestTile) {
-      unit.x = bestTile.x;
-      unit.y = bestTile.y;
+      destX = bestTile.x;
+      destY = bestTile.y;
     }
-    addLog(`${unit.name} moves closer.`);
   }
-  unit.acted = true;
+
+  const path = reconstructPath(prev, { x: unit.x, y: unit.y }, key(destX, destY));
+  animateAlongPath(unit, path, 0, () => {
+    if (willAttack) resolveCombat(unit, willAttack);
+    else addLog(`${unit.name} moves closer.`);
+    unit.acted = true;
+    render();
+    onDone();
+  });
+}
+
+function animateAlongPath(unit, path, i, done) {
+  if (path.length <= 1 || i >= path.length) {
+    done();
+    return;
+  }
+  unit.x = path[i].x;
+  unit.y = path[i].y;
+  render();
+  if (i === path.length - 1) {
+    done();
+    return;
+  }
+  setTimeout(() => animateAlongPath(unit, path, i + 1, done), 140);
 }
 
 function endEnemyPhase() {
@@ -379,6 +516,8 @@ function resetBattle() {
   state.turnCount = 1;
   state.outcome = null;
   state.log = [];
+  state.inspectId = null;
+  state.flashTile = null;
   deselect();
   state.cursor = { x: 0, y: 0 };
 }
@@ -427,19 +566,42 @@ function drawBoard() {
     }
   }
 
-  if (state.mode === "move" && state.reachable) {
+  const sel = getSelected();
+
+  // Movement (blue) and attack/heal (red/green) highlights render together while the move
+  // step hasn't been resolved yet; attack tiles are drawn after (and so visually override)
+  // movement tiles on any overlap. Once movement is resolved, only attack tiles remain.
+  if (sel && !state.moved && state.reachable) {
     ctx.fillStyle = "rgba(90,156,224,0.38)";
     for (const k of state.reachable.keys()) {
       const [x, y] = k.split(",").map(Number);
+      if (!isValidEndTile(x, y, sel)) continue;
       ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
     }
   }
-
-  if (state.mode === "target") {
-    const sel = getSelected();
-    ctx.fillStyle = sel && sel.heal != null ? "rgba(126,201,143,0.5)" : "rgba(224,85,94,0.5)";
-    for (const t of state.targets) {
+  if (sel && state.attackTargets.length) {
+    ctx.fillStyle = sel.heal != null ? "rgba(126,201,143,0.5)" : "rgba(224,85,94,0.5)";
+    for (const t of state.attackTargets) {
       ctx.fillRect(t.x * TILE, t.y * TILE, TILE, TILE);
+    }
+  }
+
+  // Move-preview path line from the unit's original tile to the previewed destination.
+  if (sel && state.previewPos) {
+    const path = reconstructPath(state.prevMap, state.originPos, key(state.previewPos.x, state.previewPos.y));
+    if (path.length > 1) {
+      ctx.strokeStyle = "#f0c674";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      path.forEach((p, i) => {
+        const cx = p.x * TILE + TILE / 2;
+        const cy = p.y * TILE + TILE / 2;
+        if (i === 0) ctx.moveTo(cx, cy);
+        else ctx.lineTo(cx, cy);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 
@@ -459,11 +621,42 @@ function drawBoard() {
     ctx.fillRect(u.x * TILE + 6, u.y * TILE + TILE - 10, barW * pct, 6);
   }
 
-  if (state.selectedId) {
-    const u = getSelected();
+  // Ghost sprite of the selected unit at its previewed (unconfirmed) destination.
+  if (sel && state.previewPos) {
+    const img = images[sel.icon];
+    if (img && img.complete) {
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(img, state.previewPos.x * TILE + 4, state.previewPos.y * TILE + 4, TILE - 8, TILE - 8);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  if (state.flashTile && Date.now() < state.flashTile.until) {
+    ctx.fillStyle = state.flashTile.color;
+    ctx.fillRect(state.flashTile.x * TILE, state.flashTile.y * TILE, TILE, TILE);
+  }
+
+  if (sel) {
     ctx.strokeStyle = "#f0c674";
     ctx.lineWidth = 3;
-    ctx.strokeRect(u.x * TILE + 2, u.y * TILE + 2, TILE - 4, TILE - 4);
+    ctx.strokeRect(sel.x * TILE + 2, sel.y * TILE + 2, TILE - 4, TILE - 4);
+  }
+
+  // Pending attack/heal target awaiting its confirming second click.
+  if (state.pendingTarget) {
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(state.pendingTarget.x * TILE + 3, state.pendingTarget.y * TILE + 3, TILE - 6, TILE - 6);
+  }
+
+  // Read-only inspection highlight (no active selection).
+  if (!sel && state.inspectId) {
+    const u = state.units.find((x) => x.id === state.inspectId && x.hp > 0);
+    if (u) {
+      ctx.strokeStyle = "#9fc4ac";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(u.x * TILE + 2, u.y * TILE + 2, TILE - 4, TILE - 4);
+    }
   }
 
   if (state.screen === "battle" && state.phase === "player") {
@@ -471,6 +664,14 @@ function drawBoard() {
     ctx.lineWidth = 2;
     ctx.strokeRect(state.cursor.x * TILE + 1, state.cursor.y * TILE + 1, TILE - 2, TILE - 2);
   }
+}
+
+function unitStatsHtml(u) {
+  const kind = u.heal != null ? "Heal" : u.magic ? "Magic" : "Physical";
+  return `
+    <strong>${u.name}</strong> — HP ${u.hp}/${u.hpMax}
+    <span class="stat-row">ATK ${u.atk} · DEF ${u.def} · SPD ${u.spd} · MOV ${u.mov} · ${kind}${u.heal != null ? "" : ` · Rng ${u.rangeMin}-${u.rangeMax} · Crit ${u.crit}%`}</span>
+  `;
 }
 
 function renderHud() {
@@ -481,14 +682,22 @@ function renderHud() {
   const infoEl = document.getElementById("unit-info");
   const sel = getSelected();
   if (sel) {
-    const kind = sel.heal != null ? "Heal" : sel.magic ? "Magic" : "Physical";
-    infoEl.innerHTML = `
-      <strong>${sel.name}</strong> — HP ${sel.hp}/${sel.hpMax}
-      <span class="stat-row">ATK ${sel.atk} · DEF ${sel.def} · SPD ${sel.spd} · MOV ${sel.mov} · ${kind}${sel.heal != null ? "" : ` · Rng ${sel.rangeMin}-${sel.rangeMax} · Crit ${sel.crit}%`}</span>
-      <span class="hint">${state.mode === "move" ? "Choose a tile to move to." : state.mode === "target" ? "Choose a target, or Wait." : ""}</span>
-    `;
+    let hint;
+    if (state.pendingTarget) hint = "Click the target again to confirm, or Wait.";
+    else if (state.previewPos) hint = "Click again to move, or click a target to move + act.";
+    else if (state.moved) hint = "Choose a target, or Wait.";
+    else hint = "Move to a tile, or click a red target to act in place.";
+    infoEl.innerHTML = `${unitStatsHtml(sel)}<span class="hint">${hint}</span>`;
+  } else if (state.inspectId) {
+    const u = state.units.find((x) => x.id === state.inspectId && x.hp > 0);
+    if (u) {
+      const note = u.team === "player" ? "(already acted this turn)" : "(enemy)";
+      infoEl.innerHTML = `${unitStatsHtml(u)}<span class="hint">${note} — inspecting only.</span>`;
+    } else {
+      infoEl.innerHTML = `<span class="hint">Select one of your units to move and act.</span>`;
+    }
   } else if (state.phase === "player") {
-    infoEl.innerHTML = `<span class="hint">Select one of your units to move and act.</span>`;
+    infoEl.innerHTML = `<span class="hint">Select one of your units to move and act. Click any unit to inspect it.</span>`;
   } else {
     infoEl.innerHTML = `<span class="hint">Enemy units are acting…</span>`;
   }
@@ -581,6 +790,7 @@ function handleKey(e) {
       break;
     case "Escape":
       deselect();
+      state.inspectId = null;
       render();
       break;
     default:

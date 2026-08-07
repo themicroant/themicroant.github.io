@@ -25,16 +25,15 @@ function buildGrid() {
     }
   };
   GameData.ROOMS.forEach((room) => {
-    fill(room.rows, room.cols, { type: "room", roomId: room.id, name: room.name, emoji: room.emoji });
+    fill(room.rows, room.cols, { type: "room", roomId: room.id, name: room.name });
   });
   fill(GameData.POWER_ROOM.rows, GameData.POWER_ROOM.cols, {
     type: "power",
     roomId: GameData.POWER_ROOM.id,
     name: GameData.POWER_ROOM.name,
-    emoji: GameData.POWER_ROOM.emoji,
   });
   GameData.CORRIDOR_RECTS.forEach((rect) => {
-    fill(rect.rows, rect.cols, { type: "corridor", name: "Corridor", emoji: "" });
+    fill(rect.rows, rect.cols, { type: "corridor", name: "Corridor" });
   });
   return grid;
 }
@@ -56,6 +55,26 @@ function isAdjacent(a, b) {
   const dr = Math.abs(a.row - b.row);
   const dc = Math.abs(a.col - b.col);
   return dr + dc === 1;
+}
+
+// The pad is plain graph paper — every playable cell gets a thin line, but a THICK wall is drawn
+// wherever a cell borders the outside or a different room/corridor/power area, matching the
+// reference pad's convention of walling off distinct rooms from each other and the corridors.
+function groupOf(cell) {
+  if (!cell || cell.type === "void") return null;
+  return cell.type === "room" ? `room:${cell.roomId}` : cell.type;
+}
+
+function wallSides(row, col) {
+  const here = groupOf(cellAt(row, col));
+  const dirs = { top: [-1, 0], right: [0, 1], bottom: [1, 0], left: [0, -1] };
+  const walls = {};
+  for (const side in dirs) {
+    const [dr, dc] = dirs[side];
+    const neighbor = groupOf(cellAt(row + dr, col + dc));
+    walls[side] = neighbor !== here;
+  }
+  return walls;
 }
 
 function doorPointAt(row, col) {
@@ -323,7 +342,9 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 }
 
-// Renders the 11x11 grid as a CSS grid of <button> cells. `decorate(row, col, cell)` returns
+// Renders the grid as a CSS grid of <button> cells, styled as plain graph paper — thin lines
+// between cells in the same room/corridor/power area, a thick wall wherever a cell borders the
+// outside or a different area, matching the reference pad. `decorate(row, col, cell)` returns
 // {cls, content, disabled} for a playable cell, or null to render it as a plain empty/void cell.
 function renderGridHTML(decorate) {
   let html = '<div class="museum-grid" id="museum-grid">';
@@ -335,8 +356,13 @@ function renderGridHTML(decorate) {
         continue;
       }
       const info = decorate(r, c, cell) || {};
-      const cls = ["cell", cell.type, info.cls || ""].join(" ");
-      html += `<button type="button" class="${cls}" data-row="${r}" data-col="${c}" ${
+      const walls = wallSides(r, c);
+      const borderStyle = ["top", "right", "bottom", "left"]
+        .map((side) => `border-${side}:${walls[side] ? "2.5px solid var(--wall)" : "1px solid var(--grid-line)"}`)
+        .join(";");
+      const isDoor = DOOR_KEYS.has(keyOf(r, c));
+      const cls = ["cell", isDoor ? "doorpoint" : "", info.cls || ""].join(" ");
+      html += `<button type="button" class="${cls}" style="${borderStyle}" data-row="${r}" data-col="${c}" ${
         info.disabled ? "disabled" : ""
       } aria-label="${escapeHtml(cell.name || "corridor")} ${r},${c}">${info.content || ""}</button>`;
     }
@@ -382,32 +408,27 @@ function setupHTML() {
   const decorate = (r, c, cell) => {
     const key = keyOf(r, c);
     if (step === "paintings") {
-      if (cell.type !== "room") return { cls: "dim", disabled: true, content: cell.emoji || "" };
+      if (cell.type !== "room") return { cls: "dim", disabled: true };
       const placed = setup.paintings.some((p) => p.row === r && p.col === c);
-      return { cls: placed ? "marked" : "", content: placed ? "❌" : cell.emoji || "" };
+      return { cls: placed ? "mark-x" : "", content: placed ? "✕" : "" };
     }
     if (step === "cameras") {
       const cam = setup.cameras.find((cm) => cm.row === r && cm.col === c);
-      return { cls: cam ? "marked" : "", content: cam ? `📷${cam.number}` : cell.emoji || "" };
+      return { cls: cam ? "mark-cam" : "", content: cam ? `<span class="cam-badge">${cam.number}</span>` : "" };
     }
     if (step === "entrance") {
       const isDoor = DOOR_KEYS.has(key);
       const chosen = setup.entrance && setup.entrance.row === r && setup.entrance.col === c;
-      return {
-        cls: chosen ? "marked" : isDoor ? "door" : "dim",
-        disabled: !isDoor,
-        content: chosen ? "🚪E" : isDoor ? "🚪" : cell.emoji || "",
-      };
+      return { cls: chosen ? "mark-entrance" : isDoor ? "" : "dim", disabled: !isDoor, content: chosen ? "E" : "" };
     }
     // review
     const painting = setup.paintings.some((p) => p.row === r && p.col === c);
     const cam = setup.cameras.find((cm) => cm.row === r && cm.col === c);
     const isEntrance = setup.entrance && setup.entrance.row === r && setup.entrance.col === c;
-    let content = cell.emoji || "";
-    if (painting) content = "❌";
-    if (cam) content = `📷${cam.number}`;
-    if (isEntrance) content = "🚪E";
-    return { cls: isEntrance ? "marked" : "", disabled: true, content };
+    if (painting) return { cls: "mark-x", disabled: true, content: "✕" };
+    if (cam) return { cls: "mark-cam", disabled: true, content: `<span class="cam-badge">${cam.number}</span>` };
+    if (isEntrance) return { cls: "mark-entrance", disabled: true, content: "E" };
+    return { disabled: true, content: "" };
   };
 
   const stepLabel = {
@@ -435,7 +456,7 @@ function setupHTML() {
     </header>
     <main class="setup-screen">
       <p class="step-label">${stepLabel}</p>
-      ${renderGridHTML(decorate)}
+      <div class="pad">${renderGridHTML(decorate)}</div>
       ${reviewList}
       <div class="nav-row">
         <button id="setup-back" ${SETUP_STEPS.indexOf(step) === 0 ? "disabled" : ""}>⬅ Back</button>
@@ -465,14 +486,21 @@ function playHTML() {
 
   const decorate = (r, c, cell) => {
     const key = keyOf(r, c);
-    let content = cell.emoji || "";
+    let content = "";
     let cls = "";
     const paintingState = round.paintings[key];
     const cam = round.cameras[key];
-    if (paintingState === "present") content = "❌";
-    else if (paintingState === "circled") content = "⭕";
-    if (cam) content = cam.disconnected ? `🚫${cam.number}` : `📷${cam.number}`;
-    if (DOOR_KEYS.has(key)) content = content || "🚪";
+    if (paintingState === "present") {
+      content = "✕";
+      cls += " mark-x";
+    } else if (paintingState === "circled") {
+      content = '<span class="circle-mark">✕</span>';
+      cls += " mark-x";
+    }
+    if (cam) {
+      content = `<span class="cam-badge${cam.disconnected ? " cam-off" : ""}">${cam.number}</span>`;
+      cls += " mark-cam";
+    }
 
     if (trailKeys.has(key)) cls += " visited";
     if (draftKeys.has(key)) cls += " drafted";
@@ -496,19 +524,37 @@ function playHTML() {
     (d) => `<button class="door-choice" data-row="${d.row}" data-col="${d.col}">${cellAt(d.row, d.col).name}</button>`
   ).join("");
 
+  // Bottom legend strip, styled after the reference pad's own: crossed-off "M M" + pliers, and a
+  // row of camera number badges crossed off once disconnected.
+  const motionLegend = Array.from({ length: GameData.MOTION_DETECTOR_USES })
+    .map((_, i) => `<span class="legend-m${i < mdUsed ? " off" : ""}">M</span>`)
+    .join("");
+  const cameraLegend = Array.from({ length: GameData.CAMERA_COUNT })
+    .map((_, i) => {
+      const n = i + 1;
+      const disconnected = Object.values(round.cameras).some((c) => c.number === n && c.disconnected);
+      return `<span class="legend-cam${disconnected ? " off" : ""}">${n}</span>`;
+    })
+    .join("");
+
   return `
     <header class="topbar">
       <h1>🕵️ Thief's Plotting Pad</h1>
       <div class="status">Turn ${round.turn}${round.seen ? " · 👁️ Spotted!" : ""}${round.powerOff ? " · ⚡ Power off" : ""}</div>
     </header>
     <main class="play-screen">
-      ${renderGridHTML(decorate)}
+      <div class="pad">
+        ${renderGridHTML(decorate)}
+        <div class="pad-legend">
+          <div class="legend-group">${motionLegend}<span class="legend-tool">✂️</span></div>
+          <div class="legend-group">${cameraLegend}</div>
+        </div>
+      </div>
 
       <section class="panel">
         <div class="counters">
-          <span>🖼️ ${round.paintingsStolen}/${GameData.PAINTING_COUNT}</span>
-          <span>📷 ${Object.values(round.cameras).filter((c) => c.disconnected).length}/${GameData.CAMERA_COUNT}</span>
-          <span>✂️ Motion Detectors ${mdUsed}/${GameData.MOTION_DETECTOR_USES}</span>
+          <span>🖼️ Paintings ${round.paintingsStolen}/${GameData.PAINTING_COUNT}</span>
+          <span>📷 Cameras ${Object.values(round.cameras).filter((c) => c.disconnected).length}/${GameData.CAMERA_COUNT}</span>
         </div>
 
         <div class="move-controls">

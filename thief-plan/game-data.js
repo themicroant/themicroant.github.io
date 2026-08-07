@@ -7,19 +7,21 @@ const GameData = {
   GRID_COLS: 11,
 
   // Main rooms — paintings may only be placed on these. Each is an axis-aligned rectangle
-  // [rowStart, rowEnd] x [colStart, colEnd], inclusive.
+  // [rowStart, rowEnd] x [colStart, colEnd], inclusive. The physical pad doesn't color-code or
+  // label rooms on the grid itself (it's plain graph paper) — names here are only for the move
+  // log, borrowed from the story text ("named the rooms after us, his dearest friends").
   ROOMS: [
-    { id: "mustard", name: "Mustard Room", emoji: "🟡", rows: [0, 2], cols: [4, 6] },
-    { id: "scarlet", name: "Scarlet Room", emoji: "🔴", rows: [8, 10], cols: [4, 6] },
-    { id: "green", name: "Green Room", emoji: "🟢", rows: [4, 6], cols: [0, 2] },
-    { id: "white", name: "White Room", emoji: "⚪", rows: [4, 6], cols: [8, 10] },
-    { id: "plum", name: "Plum Room", emoji: "🟣", rows: [3, 4], cols: [3, 4] },
-    { id: "peacock", name: "Peacock Room", emoji: "🔵", rows: [6, 7], cols: [6, 7] },
+    { id: "mustard", name: "Mustard Room", rows: [0, 2], cols: [4, 6] },
+    { id: "scarlet", name: "Scarlet Room", rows: [8, 10], cols: [4, 6] },
+    { id: "green", name: "Green Room", rows: [4, 6], cols: [0, 2] },
+    { id: "white", name: "White Room", rows: [4, 6], cols: [8, 10] },
+    { id: "plum", name: "Plum Room", rows: [3, 4], cols: [3, 4] },
+    { id: "peacock", name: "Peacock Room", rows: [6, 7], cols: [6, 7] },
   ],
 
   // The small gray Power room ("Security Command Center"). Cameras may be placed here (per the
   // rules cameras can go "wherever"), paintings may not.
-  POWER_ROOM: { id: "power", name: "Security Command Center", emoji: "⚡", rows: [3, 4], cols: [6, 7] },
+  POWER_ROOM: { id: "power", name: "Security Command Center", rows: [3, 4], cols: [6, 7] },
 
   // Corridor cells: the core's central cross, plus one extra nook. See requirements.md §3.
   CORRIDOR_RECTS: [
@@ -28,13 +30,15 @@ const GameData = {
     { rows: [6, 7], cols: [3, 4] }, // SW nook
   ],
 
-  // Fixed door/window points. One is picked as the entrance at setup; all four remain choosable
-  // when logging an escape. Each sits at the outer-wall midpoint of one arm.
+  // Fixed door/window points (the small square lock icons on the reference pad — it shows about
+  // a dozen, close to the physical game's 11 locks). Every outer-wall cell at each arm's far edge
+  // is a door/window. One is picked as the entrance at setup; all remain choosable when logging
+  // an escape.
   DOOR_POINTS: [
-    { row: 0, col: 5, room: "mustard" },
-    { row: 10, col: 5, room: "scarlet" },
-    { row: 5, col: 0, room: "green" },
-    { row: 5, col: 10, room: "white" },
+    { row: 0, col: 4 }, { row: 0, col: 5 }, { row: 0, col: 6 }, // Mustard Room (top)
+    { row: 10, col: 4 }, { row: 10, col: 5 }, { row: 10, col: 6 }, // Scarlet Room (bottom)
+    { row: 4, col: 0 }, { row: 5, col: 0 }, { row: 6, col: 0 }, // Green Room (left)
+    { row: 4, col: 10 }, { row: 5, col: 10 }, { row: 6, col: 10 }, // White Room (right)
   ],
 
   PAINTING_COUNT: 9,

@@ -17,14 +17,14 @@
   --danger: #e0555e;
   --good: #7ec98f;
 
-  --room-mustard: #6b5a1f;
-  --room-scarlet: #6b2a2a;
-  --room-green: #245c34;
-  --room-white: #4a5a55;
-  --room-plum: #4a2a5c;
-  --room-peacock: #1f4a63;
-  --room-power: #5c4a1f;
-  --corridor: #223530;
+  /* The pad itself is plain paper with hand-drawn pink/magenta marks, matching the physical
+     Thief Plotting Pad — distinct from the app's dark emoji-forward chrome around it. */
+  --paper: #ece7d8;
+  --paper-2: #e2dcc9;
+  --grid-line: #b9b2a0;
+  --wall: #26221a;
+  --ink: #d1177d;
+  --ink-dim: #b9a9c0;
 }
 * { box-sizing: border-box; }
 html, body {
@@ -80,48 +80,130 @@ main { width: 100%; display: flex; flex-direction: column; align-items: center; 
 
 .step-label { color: var(--text-dim); font-size: 0.9rem; text-align: center; margin: 0; }
 
-/* --- Museum grid --- */
+/* --- The pad: plain graph paper, like the physical Thief Plotting Pad --- */
+.pad {
+  width: 100%;
+  max-width: 400px;
+  background: var(--paper);
+  border: 3px solid var(--wall);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
 .museum-grid {
   position: relative;
   display: grid;
   grid-template-columns: repeat(11, 1fr);
   grid-template-rows: repeat(11, 1fr);
-  gap: 2px;
   width: 100%;
-  max-width: 400px;
   aspect-ratio: 1 / 1;
-  background: var(--bg-0);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px;
 }
 .cell {
-  border: none;
-  border-radius: 3px;
+  position: relative;
+  border-radius: 0;
   padding: 0;
   margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(7px, 2.4vw, 13px);
+  font-size: clamp(8px, 2.6vw, 14px);
   line-height: 1;
-  background: var(--corridor);
-  color: var(--text);
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: bold;
 }
-.cell.void { background: transparent; pointer-events: none; }
-.cell.room { background: var(--bg-2); }
-.cell.power { background: var(--room-power); }
-.cell.corridor { background: var(--corridor); }
-.cell.dim { opacity: 0.55; }
-.cell.door { outline: 1px dashed var(--accent); outline-offset: -1px; }
-.cell.marked { outline: 2px solid var(--accent); outline-offset: -2px; }
-.cell.visited { box-shadow: inset 0 0 0 999px rgba(240, 198, 116, 0.12); }
-.cell.drafted { box-shadow: inset 0 0 0 999px rgba(240, 198, 116, 0.28); }
-.cell.current { outline: 2px solid var(--good); outline-offset: -2px; }
+.cell.void { background: transparent; border: none !important; pointer-events: none; }
+.cell.dim { background: var(--paper-2); color: var(--ink-dim); }
+.cell:hover:not(:disabled) { background: var(--paper-2) !important; }
+.cell.visited:hover:not(:disabled) { background: #ddd0da !important; }
+.cell.drafted:hover:not(:disabled) { background: #e6b8d6 !important; }
+.cell.doorpoint::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24%;
+  height: 24%;
+  transform: translate(-50%, -50%);
+  border: 1.5px solid var(--wall);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.cell.mark-entrance { color: var(--ink); font-size: clamp(9px, 3vw, 15px); }
+.cell.visited { background: #ddd0da; }
+.cell.drafted { background: #e6b8d6; }
+.cell.current { box-shadow: inset 0 0 0 2px var(--ink); }
+
+.cam-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 78%;
+  height: 78%;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink);
+  position: relative;
+  font-size: 0.9em;
+}
+.cam-badge.cam-off { opacity: 0.5; }
+.cam-badge.cam-off::after {
+  content: "";
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: 50%;
+  border-top: 1.5px solid var(--ink);
+  transform: rotate(45deg);
+}
+.circle-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 82%;
+  height: 82%;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink);
+}
 
 .trail-overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
-.trail-line { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0.85; }
-.trail-dot { fill: var(--accent); }
+.trail-line { fill: none; stroke: var(--ink); stroke-width: 2; opacity: 0.9; }
+.trail-dot { fill: var(--ink); }
+
+/* --- Pad legend strip: M M + pliers, camera 1-6 --- */
+.pad-legend {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1.5px solid var(--grid-line);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.legend-group { display: flex; align-items: center; gap: 4px; }
+.legend-m, .legend-cam {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  font-weight: bold;
+  font-size: 0.85rem;
+  position: relative;
+  width: 22px;
+  height: 22px;
+}
+.legend-cam { border: 1.5px solid var(--ink); border-radius: 50%; }
+.legend-m.off, .legend-cam.off { opacity: 0.45; }
+.legend-m.off::after, .legend-cam.off::after {
+  content: "";
+  position: absolute;
+  left: -15%;
+  right: -15%;
+  top: 50%;
+  border-top: 1.5px solid var(--ink);
+  transform: rotate(-45deg);
+}
+.legend-tool { font-size: 0.9rem; }
 
 /* --- Setup screen --- */
 .setup-screen { align-items: center; }

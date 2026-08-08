@@ -83,6 +83,18 @@ function groupOf(cell) {
   return cell.type === "room" ? `room:${cell.roomId}` : cell.type;
 }
 
+// Each cell draws its own 4 borders independently (adjacent cells don't share an edge), so an
+// opening has to clear the wall on BOTH sides of the boundary — the room cell's side, and the
+// matching side of the corridor cell right across from it.
+const OPPOSITE_SIDE = { top: "bottom", bottom: "top", left: "right", right: "left" };
+const SIDE_DELTA = { top: [-1, 0], bottom: [1, 0], left: [0, -1], right: [0, 1] };
+const OPENING_KEYS = new Set();
+GameData.OPENINGS.forEach((o) => {
+  OPENING_KEYS.add(`${o.row},${o.col},${o.side}`);
+  const [dr, dc] = SIDE_DELTA[o.side];
+  OPENING_KEYS.add(`${o.row + dr},${o.col + dc},${OPPOSITE_SIDE[o.side]}`);
+});
+
 function wallSides(row, col) {
   const here = groupOf(cellAt(row, col));
   const dirs = { top: [-1, 0], right: [0, 1], bottom: [1, 0], left: [0, -1] };
@@ -90,7 +102,7 @@ function wallSides(row, col) {
   for (const side in dirs) {
     const [dr, dc] = dirs[side];
     const neighbor = groupOf(cellAt(row + dr, col + dc));
-    walls[side] = neighbor !== here;
+    walls[side] = neighbor !== here && !OPENING_KEYS.has(`${row},${col},${side}`);
   }
   return walls;
 }
@@ -390,8 +402,8 @@ function renderGridHTML(decorate) {
       const info = decorate(r, c, cell) || {};
       const walls = wallSides(r, c);
       const borderStyle = ["top", "right", "bottom", "left"]
-        .map((side) => `border-${side}:${walls[side] ? "2.5px solid var(--wall)" : "1px solid var(--grid-line)"}`)
-        .join(";");
+        .map((side) => `border-${side}:${walls[side] ? "2.5px solid var(--wall)" : "1px solid var(--grid-line)"};`)
+        .join("");
       const bgStyle = cell.color ? `background-color:${cell.color};` : "";
       const cls = ["cell", info.cls || ""].join(" ");
       html += `<button type="button" class="${cls}" style="${borderStyle}${bgStyle}" data-row="${r}" data-col="${c}" ${

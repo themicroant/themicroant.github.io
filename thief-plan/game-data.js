@@ -63,6 +63,22 @@ const GameData = {
     { row: 10, col: 10 }, // Power room, east wall
   ],
 
+  // Every room connects to the corridor across its whole shared edge for movement purposes, but
+  // that would draw as a wall-to-wall thick line — indistinguishable from a solid wall. Each of
+  // these marks one cell's specific side as a visible doorway (thin line) into the corridor, so
+  // every room shows at least one clear opening, matching the reference pad's convention of only
+  // drawing a gap in the wall where there's an actual doorway.
+  OPENINGS: [
+    { row: 2, col: 6, side: "bottom" }, // Mustard -> ring
+    { row: 5, col: 2, side: "bottom" }, // Scarlet -> hallway
+    { row: 7, col: 2, side: "top" }, // Green -> hallway
+    { row: 4, col: 11, side: "bottom" }, // Plum -> hallway
+    { row: 6, col: 11, side: "top" }, // Peacock -> hallway
+    { row: 4, col: 6, side: "top" }, // White -> ring (north)
+    { row: 10, col: 5, side: "right" }, // Gray -> connector
+    { row: 10, col: 8, side: "left" }, // Power -> connector
+  ],
+
   PAINTING_COUNT: 9,
   CAMERA_COUNT: 6,
   MOTION_DETECTOR_USES: 2,

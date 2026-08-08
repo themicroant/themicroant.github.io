@@ -82,8 +82,8 @@ const GameData = {
   OPENINGS: [
     { row: 2, col: 5, side: "bottom" }, // Mustard -> ring, west of center
     { row: 2, col: 8, side: "bottom" }, // Mustard -> ring, east of center
-    { row: 4, col: 3, side: "right" }, // Scarlet -> ring (toward center)
-    { row: 8, col: 3, side: "right" }, // Green -> ring (toward center)
+    { row: 5, col: 3, side: "right" }, // Scarlet -> ring (toward center)
+    { row: 9, col: 3, side: "right" }, // Green -> ring (toward center)
     { row: 4, col: 10, side: "left" }, // Plum -> ring (toward center)
     { row: 7, col: 10, side: "left" }, // Peacock -> ring (toward center)
     { row: 4, col: 6, side: "top" }, // White -> ring, north (double wide)

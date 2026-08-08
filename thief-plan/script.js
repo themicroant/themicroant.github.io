@@ -115,6 +115,20 @@ function doorPointAt(row, col) {
   return GameData.DOOR_POINTS.find((d) => d.row === row && d.col === col) || null;
 }
 
+// Movement is only allowed where the drawn wall is thin (same room/corridor group, or an explicit
+// opening) — a thick wall actually blocks the Thief, matching the reference pad: a room's outline
+// isn't just decorative, only its doorways connect it to the corridor.
+function canStepBetween(a, b) {
+  if (!isAdjacent(a, b)) return false;
+  let side = null;
+  if (b.row === a.row - 1) side = "top";
+  else if (b.row === a.row + 1) side = "bottom";
+  else if (b.col === a.col - 1) side = "left";
+  else if (b.col === a.col + 1) side = "right";
+  if (!side) return false;
+  return !wallSides(a.row, a.col)[side];
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -238,7 +252,7 @@ function handlePlayCellTap(row, col) {
   if (!isPlayable(row, col)) return;
   if (row === round.position.row && col === round.position.col) return; // can't land back on start
   if (draft.some((c) => c.row === row && c.col === col)) return; // no re-visiting this turn
-  if (!isAdjacent(last, { row, col })) return;
+  if (!canStepBetween(last, { row, col })) return; // walls actually block movement
   draft.push({ row, col });
   render();
 }

@@ -347,7 +347,8 @@ function escapeHtml(s) {
 // outside or a different area, matching the reference pad. `decorate(row, col, cell)` returns
 // {cls, content, disabled} for a playable cell, or null to render it as a plain empty/void cell.
 function renderGridHTML(decorate) {
-  let html = '<div class="museum-grid" id="museum-grid">';
+  const gridStyle = `grid-template-columns:repeat(${GameData.GRID_COLS},1fr);grid-template-rows:repeat(${GameData.GRID_ROWS},1fr);aspect-ratio:${GameData.GRID_COLS}/${GameData.GRID_ROWS};`;
+  let html = `<div class="museum-grid" id="museum-grid" style="${gridStyle}">`;
   for (let r = 0; r < GameData.GRID_ROWS; r++) {
     for (let c = 0; c < GameData.GRID_COLS; c++) {
       const cell = cellAt(r, c);

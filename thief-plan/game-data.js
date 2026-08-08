@@ -47,7 +47,7 @@ const GameData = {
     { rows: [4, 8], cols: [9, 9] }, // ring: east of White
     { rows: [6, 6], cols: [1, 3] }, // the hallway between Scarlet and Green
     { rows: [5, 5], cols: [10, 12] }, // the hallway between Plum and Peacock
-    { rows: [10, 11], cols: [6, 7] }, // the walkable connector between Gray and Power
+    { rows: [10, 10], cols: [6, 7] }, // the walkable connector between Gray and Power
   ],
 
   // Fixed door/window points: each is a void cell just outside the room it serves, matching the
@@ -56,9 +56,9 @@ const GameData = {
   // entrance; all remain choosable later when logging an escape.
   DOOR_POINTS: [
     { row: 0, col: 5 }, { row: 0, col: 8 }, // North (Mustard), one square in from each corner
-    { row: 3, col: 0 }, { row: 6, col: 0 }, { row: 9, col: 0 }, // West: Scarlet, hallway, Green
+    { row: 4, col: 0 }, { row: 6, col: 0 }, { row: 8, col: 0 }, // West: Scarlet, hallway, Green
     { row: 3, col: 13 }, { row: 5, col: 13 }, { row: 9, col: 13 }, // East: Plum, hallway, Peacock
-    { row: 12, col: 6 }, { row: 12, col: 7 }, // South, on the walkable connector
+    { row: 11, col: 6 }, { row: 11, col: 7 }, // South, on the walkable connector
     { row: 10, col: 3 }, // Gray Room, west wall
     { row: 10, col: 10 }, // Power room, east wall
   ],

@@ -143,6 +143,10 @@ main { width: 100%; display: flex; flex-direction: column; align-items: center; 
 .cell.drafted { background: #e6b8d6; }
 .cell.current { box-shadow: inset 0 0 0 2px var(--ink); }
 
+/* The Power room's printed "P" label — part of the board itself, not a Thief mark, so it uses the
+   wall ink rather than the pink pen color. */
+.power-label { color: var(--wall); opacity: 0.55; font-size: 1.1em; }
+
 .cam-badge {
   display: inline-flex;
   align-items: center;

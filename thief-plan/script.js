@@ -41,6 +41,10 @@ function buildGrid() {
 
 const GRID = buildGrid();
 const DOOR_KEYS = new Set(GameData.DOOR_POINTS.map((d) => keyOf(d.row, d.col)));
+// The Power room carries a printed "P" label (like the physical board's own Security Command
+// Center marking) on one of its cells — not a Thief-drawn mark, so it always shows and doesn't
+// use the pink ink, but a camera placed on that same cell still takes visual priority.
+const POWER_LABEL_KEY = keyOf(GameData.POWER_ROOM.rows[0], GameData.POWER_ROOM.cols[0]);
 
 function cellAt(row, col) {
   if (row < 0 || col < 0 || row >= GameData.GRID_ROWS || col >= GameData.GRID_COLS) return null;
@@ -405,10 +409,15 @@ function renderGridHTML(decorate) {
         .map((side) => `border-${side}:${walls[side] ? "2.5px solid var(--wall)" : "1px solid var(--grid-line)"};`)
         .join("");
       const bgStyle = cell.color ? `background-color:${cell.color};` : "";
-      const cls = ["cell", info.cls || ""].join(" ");
+      let content = info.content || "";
+      let cls = ["cell", info.cls || ""].join(" ");
+      if (!content && keyOf(r, c) === POWER_LABEL_KEY) {
+        content = '<span class="power-label">P</span>';
+        cls += " power-cell";
+      }
       html += `<button type="button" class="${cls}" style="${borderStyle}${bgStyle}" data-row="${r}" data-col="${c}" ${
         info.disabled ? "disabled" : ""
-      } aria-label="${escapeHtml(cell.name || "corridor")} ${r},${c}">${info.content || ""}</button>`;
+      } aria-label="${escapeHtml(cell.name || "corridor")} ${r},${c}">${content}</button>`;
     }
   }
   html += "</div>";

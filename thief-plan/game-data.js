@@ -69,15 +69,19 @@ const GameData = {
   // every room shows at least one clear opening, matching the reference pad's convention of only
   // drawing a gap in the wall where there's an actual doorway.
   // Every opening faces toward the board's center (the White Room). Mustard Room gets two,
-  // equally spaced on either side of its own center column.
+  // symmetric around its own center column with a gap between them (not touching each other).
+  // The White Room's own openings are two cells wide, on both its north and south sides.
   OPENINGS: [
-    { row: 2, col: 6, side: "bottom" }, // Mustard -> ring, west of center
-    { row: 2, col: 7, side: "bottom" }, // Mustard -> ring, east of center
+    { row: 2, col: 5, side: "bottom" }, // Mustard -> ring, west of center
+    { row: 2, col: 8, side: "bottom" }, // Mustard -> ring, east of center
     { row: 4, col: 3, side: "right" }, // Scarlet -> ring (toward center)
     { row: 8, col: 3, side: "right" }, // Green -> ring (toward center)
     { row: 4, col: 10, side: "left" }, // Plum -> ring (toward center)
     { row: 7, col: 10, side: "left" }, // Peacock -> ring (toward center)
-    { row: 4, col: 6, side: "top" }, // White -> ring (north)
+    { row: 4, col: 6, side: "top" }, // White -> ring, north (double wide)
+    { row: 4, col: 7, side: "top" }, // White -> ring, north (double wide)
+    { row: 8, col: 6, side: "bottom" }, // White -> ring, south (double wide)
+    { row: 8, col: 7, side: "bottom" }, // White -> ring, south (double wide)
     { row: 10, col: 5, side: "top" }, // Gray -> ring (toward center)
     { row: 10, col: 8, side: "top" }, // Power -> ring (toward center)
   ],

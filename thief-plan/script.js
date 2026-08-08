@@ -166,7 +166,12 @@ function startRound() {
 
   state.round = {
     position: { row: entryCell.row, col: entryCell.col },
+    // Every cell the Thief has ever crossed, for drawing the trail *line*.
     trail: [{ row: entryCell.row, col: entryCell.col }],
+    // Only the cell landed on at the end of each confirmed move (plus the entrance) — these are
+    // the only cells that get a *dot*, matching "draw a line through the spaces you cross, and a
+    // dot where you land" (one dot per turn, not one per cell crossed).
+    landedCells: [{ row: entryCell.row, col: entryCell.col }],
     turn: 0,
     paintings,
     cameras,
@@ -203,6 +208,7 @@ function confirmMove() {
   resolvePendingRemoval();
   steps.forEach((c) => round.trail.push(c));
   round.position = steps[steps.length - 1];
+  round.landedCells.push(round.position);
   round.turn++;
   const destCell = cellAt(round.position.row, round.position.col);
   log(`Turn ${round.turn}: moved ${steps.length} space${steps.length > 1 ? "s" : ""} to ${destCell.name}.`);
@@ -708,7 +714,11 @@ function drawTrail() {
     svg.appendChild(line);
   }
 
-  points.forEach((p) => {
+  // Dots only where a move actually ended (plus the entrance and the draft's tentative landing
+  // spot, for feedback) — not on every cell crossed getting there. `|| [points[0]]` guards a save
+  // from before landedCells existed.
+  const dotPoints = (round.landedCells || [points[0]]).concat(state.moveDraft.length ? [state.moveDraft[state.moveDraft.length - 1]] : []);
+  dotPoints.forEach((p) => {
     const pt = centerOf(p.row, p.col);
     if (!pt) return;
     const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");

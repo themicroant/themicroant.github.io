@@ -93,10 +93,10 @@ main { width: 100%; display: flex; flex-direction: column; align-items: center; 
 .museum-grid {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(11, 1fr);
-  grid-template-rows: repeat(12, 1fr);
+  grid-template-columns: repeat(14, 1fr);
+  grid-template-rows: repeat(13, 1fr);
   width: 100%;
-  aspect-ratio: 11 / 12;
+  aspect-ratio: 14 / 13;
 }
 .cell {
   position: relative;
@@ -117,18 +117,27 @@ main { width: 100%; display: flex; flex-direction: column; align-items: center; 
 .cell:hover:not(:disabled) { background: var(--paper-2) !important; }
 .cell.visited:hover:not(:disabled) { background: #ddd0da !important; }
 .cell.drafted:hover:not(:disabled) { background: #e6b8d6 !important; }
-.cell.doorpoint::after {
+
+/* A door/window: a small non-travelable square marker sitting outside the room it serves, not a
+   floor tile — so it always stays visually distinct from playable cells regardless of step. */
+.cell.window {
+  background: transparent !important;
+  pointer-events: auto;
+}
+.cell.window::after {
   content: "";
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 24%;
-  height: 24%;
+  width: 46%;
+  height: 46%;
   transform: translate(-50%, -50%);
   border: 1.5px solid var(--wall);
-  opacity: 0.55;
+  opacity: 0.6;
   pointer-events: none;
 }
+.cell.window:hover:not(:disabled)::after { opacity: 0.9; }
+.cell.window.mark-entrance::after { border-color: var(--ink); border-width: 2px; opacity: 1; }
 .cell.mark-entrance { color: var(--ink); font-size: clamp(9px, 3vw, 15px); }
 .cell.visited { background: #ddd0da; }
 .cell.drafted { background: #e6b8d6; }
@@ -166,8 +175,10 @@ main { width: 100%; display: flex; flex-direction: column; align-items: center; 
 }
 
 .trail-overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
-.trail-line { fill: none; stroke: var(--ink); stroke-width: 2; opacity: 0.9; }
-.trail-dot { fill: var(--ink); }
+/* Each move segment is drawn as its own stroke (not one combined path), and at low opacity, so
+   where the Thief's path loops back over itself the overlapping strokes visibly darken. */
+.trail-line { fill: none; stroke: var(--ink); stroke-width: 2; opacity: 0.45; }
+.trail-dot { fill: var(--ink); opacity: 0.9; }
 
 /* --- Pad legend strip: M M + pliers, camera 1-6 --- */
 .pad-legend {
@@ -191,9 +202,18 @@ main { width: 100%; display: flex; flex-direction: column; align-items: center; 
   position: relative;
   width: 22px;
   height: 22px;
+  padding: 0;
 }
+button.legend-m {
+  background: transparent;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  cursor: pointer;
+}
+button.legend-m:hover:not(:disabled) { background: rgba(209, 23, 125, 0.12); }
 .legend-cam { border: 1.5px solid var(--ink); border-radius: 50%; }
 .legend-m.off, .legend-cam.off { opacity: 0.45; }
+.legend-m.off { cursor: default; }
 .legend-m.off::after, .legend-cam.off::after {
   content: "";
   position: absolute;

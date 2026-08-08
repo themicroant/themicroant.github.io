@@ -25,12 +25,13 @@ function buildGrid() {
     }
   };
   GameData.ROOMS.forEach((room) => {
-    fill(room.rows, room.cols, { type: "room", roomId: room.id, name: room.name });
+    fill(room.rows, room.cols, { type: "room", roomId: room.id, name: room.name, color: room.color });
   });
   fill(GameData.POWER_ROOM.rows, GameData.POWER_ROOM.cols, {
     type: "power",
     roomId: GameData.POWER_ROOM.id,
     name: GameData.POWER_ROOM.name,
+    color: GameData.POWER_ROOM.color,
   });
   GameData.CORRIDOR_RECTS.forEach((rect) => {
     fill(rect.rows, rect.cols, { type: "corridor", name: "Corridor" });
@@ -55,6 +56,23 @@ function isAdjacent(a, b) {
   const dr = Math.abs(a.row - b.row);
   const dc = Math.abs(a.col - b.col);
   return dr + dc === 1;
+}
+
+// A door/window is a void cell just outside a room; this finds the one playable cell it opens
+// into, for movement/logging purposes (the Thief actually stands in that cell, not the window).
+function doorEntryCell(door) {
+  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  for (const [dr, dc] of dirs) {
+    const r = door.row + dr;
+    const c = door.col + dc;
+    if (isPlayable(r, c)) return { row: r, col: c };
+  }
+  return null;
+}
+
+function doorRoomName(door) {
+  const entry = doorEntryCell(door);
+  return entry ? cellAt(entry.row, entry.col).name : "the museum";
 }
 
 // The pad is plain graph paper — every playable cell gets a thin line, but a THICK wall is drawn
@@ -124,14 +142,15 @@ function log(message) {
 
 function startRound() {
   const entrance = state.setup.entrance;
+  const entryCell = doorEntryCell(entrance);
   const paintings = {};
   state.setup.paintings.forEach((p) => (paintings[keyOf(p.row, p.col)] = "present"));
   const cameras = {};
   state.setup.cameras.forEach((c) => (cameras[keyOf(c.row, c.col)] = { number: c.number, disconnected: false }));
 
   state.round = {
-    position: { row: entrance.row, col: entrance.col },
-    trail: [{ row: entrance.row, col: entrance.col }],
+    position: { row: entryCell.row, col: entryCell.col },
+    trail: [{ row: entryCell.row, col: entryCell.col }],
     turn: 0,
     paintings,
     cameras,
@@ -144,8 +163,7 @@ function startRound() {
     exitPoint: null,
     log: [],
   };
-  const entranceCell = cellAt(entrance.row, entrance.col);
-  log(`Entered the museum through ${entranceCell.name}.`);
+  log(`Entered the museum through ${doorRoomName(entrance)}.`);
   state.screen = "playing";
   save();
   render();
@@ -266,8 +284,7 @@ function markEscaped(doorPoint) {
   const round = state.round;
   round.outcome = "escaped";
   round.exitPoint = doorPoint;
-  const cell = cellAt(doorPoint.row, doorPoint.col);
-  log(`Turn ${round.turn}: escaped through ${cell.name}! Round won.`);
+  log(`Turn ${round.turn}: escaped through ${doorRoomName(doorPoint)}! Round won.`);
   state.screen = "summary";
   save();
   render();
@@ -344,26 +361,40 @@ function escapeHtml(s) {
 
 // Renders the grid as a CSS grid of <button> cells, styled as plain graph paper — thin lines
 // between cells in the same room/corridor/power area, a thick wall wherever a cell borders the
-// outside or a different area, matching the reference pad. `decorate(row, col, cell)` returns
-// {cls, content, disabled} for a playable cell, or null to render it as a plain empty/void cell.
+// outside or a different area, matching the reference pad. Rooms get a barely-visible paper tint.
+// Door/window points are void cells just outside a room — rendered as a small non-travelable
+// square marker, never part of the walkable floor. `decorate(row, col, cell)` returns
+// {cls, content, disabled} for a playable or door cell, or null to render a plain empty/void cell.
 function renderGridHTML(decorate) {
   const gridStyle = `grid-template-columns:repeat(${GameData.GRID_COLS},1fr);grid-template-rows:repeat(${GameData.GRID_ROWS},1fr);aspect-ratio:${GameData.GRID_COLS}/${GameData.GRID_ROWS};`;
   let html = `<div class="museum-grid" id="museum-grid" style="${gridStyle}">`;
   for (let r = 0; r < GameData.GRID_ROWS; r++) {
     for (let c = 0; c < GameData.GRID_COLS; c++) {
       const cell = cellAt(r, c);
-      if (cell.type === "void") {
+      const isDoor = DOOR_KEYS.has(keyOf(r, c));
+
+      if (cell.type === "void" && !isDoor) {
         html += '<div class="cell void"></div>';
         continue;
       }
+      if (cell.type === "void") {
+        // A door/window: a small square marker outside the room, not a floor tile.
+        const info = decorate(r, c, cell) || {};
+        const cls = ["cell", "void", "window", info.cls || ""].join(" ");
+        html += `<button type="button" class="${cls}" data-row="${r}" data-col="${c}" ${
+          info.disabled ? "disabled" : ""
+        } aria-label="window ${r},${c}">${info.content || ""}</button>`;
+        continue;
+      }
+
       const info = decorate(r, c, cell) || {};
       const walls = wallSides(r, c);
       const borderStyle = ["top", "right", "bottom", "left"]
         .map((side) => `border-${side}:${walls[side] ? "2.5px solid var(--wall)" : "1px solid var(--grid-line)"}`)
         .join(";");
-      const isDoor = DOOR_KEYS.has(keyOf(r, c));
-      const cls = ["cell", isDoor ? "doorpoint" : "", info.cls || ""].join(" ");
-      html += `<button type="button" class="${cls}" style="${borderStyle}" data-row="${r}" data-col="${c}" ${
+      const bgStyle = cell.color ? `background-color:${cell.color};` : "";
+      const cls = ["cell", info.cls || ""].join(" ");
+      html += `<button type="button" class="${cls}" style="${borderStyle}${bgStyle}" data-row="${r}" data-col="${c}" ${
         info.disabled ? "disabled" : ""
       } aria-label="${escapeHtml(cell.name || "corridor")} ${r},${c}">${info.content || ""}</button>`;
     }
@@ -443,7 +474,7 @@ function setupHTML() {
     <ul class="review-list">
       <li>🖼️ ${setup.paintings.length} paintings marked</li>
       <li>📷 ${setup.cameras.length} cameras marked</li>
-      <li>🚪 Entrance: ${cellAt(setup.entrance.row, setup.entrance.col).name}</li>
+      <li>🚪 Entrance: ${doorRoomName(setup.entrance)}</li>
     </ul>
     <button id="begin-btn" class="primary">Begin Heist 🕵️</button>
   ` : "";
@@ -522,13 +553,17 @@ function playHTML() {
   const mdLeft = GameData.MOTION_DETECTOR_USES - mdUsed;
 
   const doorButtons = GameData.DOOR_POINTS.map(
-    (d) => `<button class="door-choice" data-row="${d.row}" data-col="${d.col}">${cellAt(d.row, d.col).name}</button>`
+    (d) => `<button class="door-choice" data-row="${d.row}" data-col="${d.col}">${doorRoomName(d)}</button>`
   ).join("");
 
   // Bottom legend strip, styled after the reference pad's own: crossed-off "M M" + pliers, and a
-  // row of camera number badges crossed off once disconnected.
+  // row of camera number badges crossed off once disconnected. The M's are themselves clickable —
+  // tapping one cuts that motion detector, same as the reference pad crossing one off by hand.
   const motionLegend = Array.from({ length: GameData.MOTION_DETECTOR_USES })
-    .map((_, i) => `<span class="legend-m${i < mdUsed ? " off" : ""}">M</span>`)
+    .map((_, i) => {
+      const used = i < mdUsed;
+      return `<button type="button" class="legend-m${used ? " off" : ""}" ${used ? "disabled" : ""} aria-label="Disconnect Motion Detectors">M</button>`;
+    })
     .join("");
   const cameraLegend = Array.from({ length: GameData.CAMERA_COUNT })
     .map((_, i) => {
@@ -567,7 +602,6 @@ function playHTML() {
         ${actions.length ? `<div class="context-actions">${actions.join("")}</div>` : ""}
 
         <div class="always-actions">
-          <button id="motion-btn" ${mdLeft > 0 ? "" : "disabled"}>✂️ Disconnect Motion Detectors (${mdLeft} left)</button>
           <button id="seen-btn" ${round.seen ? "disabled" : ""}>👁️ I've been seen!</button>
           <button id="caught-btn" class="danger">🚨 I'm caught!</button>
           <button id="escape-btn" class="success">🏃 I've escaped!</button>
@@ -597,7 +631,9 @@ function bindPlayControls() {
   on("snatch-btn", snatchPainting);
   on("camera-btn", disconnectCamera);
   on("power-btn", togglePower);
-  on("motion-btn", disconnectMotionDetector);
+  document.querySelectorAll(".legend-m").forEach((btn) => {
+    btn.addEventListener("click", disconnectMotionDetector);
+  });
   on("seen-btn", markSeen);
   on("caught-btn", markCaught);
   on("escape-btn", () => {
@@ -636,16 +672,20 @@ function drawTrail() {
     return { x: b.left - rect.left + b.width / 2, y: b.top - rect.top + b.height / 2 };
   };
 
-  let pathD = "";
-  points.forEach((p, i) => {
-    const pt = centerOf(p.row, p.col);
-    if (!pt) return;
-    pathD += `${i === 0 ? "M" : "L"} ${pt.x} ${pt.y} `;
-  });
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", pathD.trim());
-  path.setAttribute("class", "trail-line");
-  svg.appendChild(path);
+  // Draw each move segment as its own <line>, not one combined path — at low opacity, this makes
+  // a spot the Thief backtracked over visibly darker instead of looking like one clean route.
+  for (let i = 1; i < points.length; i++) {
+    const a = centerOf(points[i - 1].row, points[i - 1].col);
+    const b = centerOf(points[i].row, points[i].col);
+    if (!a || !b) continue;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", a.x);
+    line.setAttribute("y1", a.y);
+    line.setAttribute("x2", b.x);
+    line.setAttribute("y2", b.y);
+    line.setAttribute("class", "trail-line");
+    svg.appendChild(line);
+  }
 
   points.forEach((p) => {
     const pt = centerOf(p.row, p.col);

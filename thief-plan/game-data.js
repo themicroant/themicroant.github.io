@@ -54,13 +54,20 @@ const GameData = {
   // small square lock icons on the reference pad (rendered as a non-travelable marker, not a
   // floor tile). Every room has at least one. At setup the Thief picks exactly one as their
   // entrance; all remain choosable later when logging an escape.
+  //
+  // A door at an outer *corner* can end up touching two different rooms' cells at once (e.g. one
+  // via its top neighbor, another via its side neighbor) — doorEntryCell() resolves that by
+  // checking top/bottom/left/right in that fixed order, so whichever room it finds first wins,
+  // silently mislabeling the door as the wrong room's. Every point below is placed so only ONE
+  // room cell actually borders it — verify a new one the same way before adding it.
   DOOR_POINTS: [
     { row: 0, col: 5 }, { row: 0, col: 8 }, // North (Mustard), one square in from each corner
     { row: 4, col: 0 }, { row: 6, col: 0 }, { row: 8, col: 0 }, // West: Scarlet, hallway, Green
-    { row: 3, col: 13 }, { row: 5, col: 13 }, { row: 9, col: 13 }, // East: Plum, hallway, Peacock
+    { row: 10, col: 2 }, // Green Room, second door (south end of its west wall)
+    { row: 2, col: 11 }, { row: 5, col: 13 }, { row: 8, col: 13 }, // East: Plum, hallway, Peacock
     { row: 11, col: 6 }, { row: 11, col: 7 }, // South, on the walkable connector
-    { row: 10, col: 3 }, // Gray Room, west wall
-    { row: 10, col: 10 }, // Power room, east wall
+    { row: 11, col: 3 }, // Gray Room, bottom-left corner
+    { row: 11, col: 10 }, // Power room, bottom-right corner
   ],
 
   // Every room connects to the corridor across its whole shared edge for movement purposes, but
@@ -82,6 +89,8 @@ const GameData = {
     { row: 4, col: 7, side: "top" }, // White -> ring, north (double wide)
     { row: 8, col: 6, side: "bottom" }, // White -> ring, south (double wide)
     { row: 8, col: 7, side: "bottom" }, // White -> ring, south (double wide)
+    { row: 6, col: 5, side: "left" }, // White -> ring, west
+    { row: 6, col: 8, side: "right" }, // White -> ring, east
     { row: 10, col: 5, side: "top" }, // Gray -> ring (toward center)
     { row: 10, col: 8, side: "top" }, // Power -> ring (toward center)
   ],

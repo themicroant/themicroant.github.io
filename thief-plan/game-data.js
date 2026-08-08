@@ -20,11 +20,11 @@ const GameData = {
   // between them too, where the entrance is), and down to two 2x2 rooms on the south flanking a
   // small walkable connector.
   ROOMS: [
-    { id: "mustard", name: "Mustard Room", rows: [1, 2], cols: [4, 9], color: "#f2ecd6" }, // North, 2x6
-    { id: "scarlet", name: "Scarlet Room", rows: [3, 5], cols: [1, 3], color: "#f1e2df" }, // West upper, 3x3
-    { id: "green", name: "Green Room", rows: [7, 9], cols: [1, 3], color: "#e5ebe0" }, // West lower, 3x3
-    { id: "plum", name: "Plum Room", rows: [3, 4], cols: [10, 12], color: "#ece2ec" }, // East upper, 3x2
-    { id: "peacock", name: "Peacock Room", rows: [6, 9], cols: [10, 12], color: "#dfe7ec" }, // East lower, 3x4
+    { id: "mustard", name: "Mustard Room", rows: [1, 2], cols: [4, 9], color: "#f1e0e0" }, // North, 2x6 — red
+    { id: "scarlet", name: "Scarlet Room", rows: [3, 5], cols: [1, 3], color: "#ece2ec" }, // West upper, 3x3 — purple
+    { id: "green", name: "Green Room", rows: [7, 9], cols: [1, 3], color: "#f2ecd6" }, // West lower, 3x3 — mustard
+    { id: "plum", name: "Plum Room", rows: [3, 4], cols: [10, 12], color: "#dfe7ec" }, // East upper, 3x2 — blue
+    { id: "peacock", name: "Peacock Room", rows: [6, 9], cols: [10, 12], color: "#e5ebe0" }, // East lower, 3x4 — green
     { id: "white", name: "White Room", rows: [4, 8], cols: [5, 8], color: "#eee9dc" }, // Middle, 4 wide x 5 tall
     { id: "gray", name: "Small Gray Room", rows: [10, 11], cols: [4, 5], color: "#e7e6e1" }, // South
     // west, mirrors Power. The rules' "small 'empty' gray room" a painting may optionally go in,

@@ -6,9 +6,16 @@ const SAVE_KEY = "advancechess_save";
 const PIECE_GLYPH = { k: "♔", q: "♕", r: "♖", b: "♗", n: "♘", p: "♙" };
 const PIECE_LETTER = { p: "", n: "N", b: "B", r: "R", q: "Q", k: "K" };
 const KNIGHT_OFFSETS = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+const KNIGHT_OFFSETS_LONG = [[-1,-3],[-1,3],[1,-3],[1,3],[-3,-1],[-3,1],[3,-1],[3,1]];
 const DIRS_DIAG = [[-1,-1],[-1,1],[1,-1],[1,1]];
 const DIRS_STRAIGHT = [[-1,0],[1,0],[0,-1],[0,1]];
 const DIRS_8 = DIRS_DIAG.concat(DIRS_STRAIGHT);
+
+// Looks up an ability's data definition (name/cost/kind/description) by piece type + ability id.
+function abilityDef(type, id) {
+  if (!id) return null;
+  return (GameData.UPGRADES[type] || []).find((u) => u.id === id) || null;
+}
 
 // ---------- board helpers ----------
 
@@ -18,10 +25,10 @@ function createInitialBoard() {
   const back = ["r", "n", "b", "q", "k", "b", "n", "r"];
   const board = Array.from({ length: 8 }, () => Array(8).fill(null));
   for (let c = 0; c < 8; c++) {
-    board[0][c] = { type: back[c], color: "b", hasMoved: false, upgraded: false, upgradeUsed: false };
-    board[1][c] = { type: "p", color: "b", hasMoved: false, upgraded: false, upgradeUsed: false };
-    board[6][c] = { type: "p", color: "w", hasMoved: false, upgraded: false, upgradeUsed: false };
-    board[7][c] = { type: back[c], color: "w", hasMoved: false, upgraded: false, upgradeUsed: false };
+    board[0][c] = { type: back[c], color: "b", hasMoved: false, upgrade: null, upgradeUsed: false };
+    board[1][c] = { type: "p", color: "b", hasMoved: false, upgrade: null, upgradeUsed: false };
+    board[6][c] = { type: "p", color: "w", hasMoved: false, upgrade: null, upgradeUsed: false };
+    board[7][c] = { type: back[c], color: "w", hasMoved: false, upgrade: null, upgradeUsed: false };
   }
   return board;
 }
@@ -54,10 +61,15 @@ function rayClear(board, r, c, tr, tc) {
   return true;
 }
 
+// True if there's exactly one piece between (r,c) and (tr,tc) along a straight or diagonal line,
+// and (tr,tc) is the very next square beyond that one blocker — the shared geometry behind the
+// Siege Engine / Anchorite's Leap / Diplomat's Envoy abilities.
 function raySiegeTarget(board, r, c, tr, tc) {
-  if (r !== tr && c !== tc) return false;
-  if (r === tr && c === tc) return false;
-  const dr = Math.sign(tr - r), dc = Math.sign(tc - c);
+  const dr0 = tr - r, dc0 = tc - c;
+  const straight = (dr0 === 0 || dc0 === 0) && !(dr0 === 0 && dc0 === 0);
+  const diag = Math.abs(dr0) === Math.abs(dc0) && dr0 !== 0;
+  if (!straight && !diag) return false;
+  const dr = Math.sign(dr0), dc = Math.sign(dc0);
   let cr = r + dr, cc = c + dc;
   let blocker = null;
   while (cr !== tr || cc !== tc) {
@@ -68,33 +80,44 @@ function raySiegeTarget(board, r, c, tr, tc) {
   return blocker.r + dr === tr && blocker.c + dc === tc;
 }
 
+function offsetMatch(dirs, dr, dc) { return dirs.some(([odr, odc]) => odr === dr && odc === dc); }
+
 function pieceAttacksSquare(board, p, r, c, tr, tc) {
   const dr = tr - r, dc = tc - c;
+  const u = p.upgrade;
   switch (p.type) {
     case "p": {
       const dir = p.color === "w" ? -1 : 1;
       if (dr === dir && Math.abs(dc) === 1) return true;
-      if (p.upgraded && dr === 2 * dir && dc === 0) {
-        if (!board[r + dir][c]) return true;
-      }
+      if (u === "longbowman" && dr === 2 * dir && dc === 0 && !board[r + dir][c]) return true;
+      if (u === "skirmisher" && dr === dir && dc === 0) return true;
       return false;
     }
-    case "n":
-      return KNIGHT_OFFSETS.some(([odr, odc]) => odr === dr && odc === dc);
+    case "n": {
+      if (offsetMatch(KNIGHT_OFFSETS, dr, dc)) return true;
+      if (u === "feint" && offsetMatch(DIRS_STRAIGHT, dr, dc)) return true;
+      if (u === "deepstrike" && offsetMatch(KNIGHT_OFFSETS_LONG, dr, dc)) return true;
+      return false;
+    }
     case "b": {
       if (Math.abs(dr) === Math.abs(dc) && dr !== 0 && rayClear(board, r, c, tr, tc)) return true;
-      if (p.upgraded && !p.upgradeUsed && KNIGHT_OFFSETS.some(([odr, odc]) => odr === dr && odc === dc)) return true;
+      if (u === "blessing" && !p.upgradeUsed && offsetMatch(KNIGHT_OFFSETS, dr, dc)) return true;
+      if (u === "vigil" && offsetMatch(DIRS_STRAIGHT, dr, dc)) return true;
+      if (u === "anchorite" && raySiegeTarget(board, r, c, tr, tc)) return true;
       return false;
     }
     case "r": {
       if ((r === tr || c === tc) && !(r === tr && c === tc) && rayClear(board, r, c, tr, tc)) return true;
-      if (p.upgraded && raySiegeTarget(board, r, c, tr, tc)) return true;
+      if (u === "siege" && raySiegeTarget(board, r, c, tr, tc)) return true;
+      if (u === "vanguard" && offsetMatch(DIRS_DIAG, dr, dc)) return true;
       return false;
     }
     case "q": {
       const straight = (r === tr || c === tc) && !(r === tr && c === tc);
       const diag = Math.abs(dr) === Math.abs(dc) && dr !== 0;
       if ((straight || diag) && rayClear(board, r, c, tr, tc)) return true;
+      if (u === "regicide" && offsetMatch(KNIGHT_OFFSETS, dr, dc)) return true;
+      if (u === "diplomat" && raySiegeTarget(board, r, c, tr, tc)) return true;
       return false;
     }
     case "k":
@@ -140,7 +163,9 @@ function slideMoves(board, r, c, color, dirs) {
   return moves;
 }
 
-function siegeMoves(board, r, c, color, dirs) {
+// Siege-style jump: along each direction, if exactly one piece blocks the way and a more distant
+// enemy piece sits immediately beyond it, leap the blocker and capture that distant piece.
+function siegeMoves(board, r, c, color, dirs, special) {
   const moves = [];
   for (const [dr, dc] of dirs) {
     let tr = r + dr, tc = c + dc;
@@ -154,20 +179,71 @@ function siegeMoves(board, r, c, color, dirs) {
     if (!inBounds(br, bc)) continue;
     const beyond = board[br][bc];
     if (beyond && beyond.color !== color) {
-      moves.push({ from: { r, c }, to: { r: br, c: bc }, captureSquare: { r: br, c: bc }, special: "siege" });
+      moves.push({ from: { r, c }, to: { r: br, c: bc }, captureSquare: { r: br, c: bc }, special });
     }
   }
   return moves;
 }
 
-function knightPatternMoves(board, r, c, color, special) {
+function knightPatternMoves(board, r, c, color, special, offsets) {
   const moves = [];
-  for (const [dr, dc] of KNIGHT_OFFSETS) {
+  for (const [dr, dc] of (offsets || KNIGHT_OFFSETS)) {
     const tr = r + dr, tc = c + dc;
     if (!inBounds(tr, tc)) continue;
     const target = board[tr][tc];
     if (!target) moves.push({ from: { r, c }, to: { r: tr, c: tc }, captureSquare: null, special });
     else if (target.color !== color) moves.push({ from: { r, c }, to: { r: tr, c: tc }, captureSquare: { r: tr, c: tc }, special });
+  }
+  return moves;
+}
+
+// Single-square step in the given directions (used for Feint/Vigil/Vanguard).
+function oneStepMoves(board, r, c, color, dirs, special) {
+  const moves = [];
+  for (const [dr, dc] of dirs) {
+    const tr = r + dr, tc = c + dc;
+    if (!inBounds(tr, tc)) continue;
+    const target = board[tr][tc];
+    if (!target) moves.push({ from: { r, c }, to: { r: tr, c: tc }, captureSquare: null, special });
+    else if (target.color !== color) moves.push({ from: { r, c }, to: { r: tr, c: tc }, captureSquare: { r: tr, c: tc }, special });
+  }
+  return moves;
+}
+
+// Slides straight through any blockers to land on an empty square beyond (Portcullis). No
+// capture; blockers are unaffected.
+function ignoreBlockersSlide(board, r, c, color, dirs, special) {
+  const moves = [];
+  for (const [dr, dc] of dirs) {
+    let tr = r + dr, tc = c + dc;
+    while (inBounds(tr, tc)) {
+      if (!board[tr][tc]) moves.push({ from: { r, c }, to: { r: tr, c: tc }, captureSquare: null, special });
+      tr += dr; tc += dc;
+    }
+  }
+  return moves;
+}
+
+// A straight-line dash of exactly `distance` squares: every square crossed and the destination
+// must be empty, and every square crossed (not counting the origin) must be unattacked. Used for
+// Royal Guard / Flank Guard / Night March. The destination's own safety is left to the generic
+// king-safety legality filter.
+function dashMoves(board, r, c, color, dirs, distance, special) {
+  const moves = [];
+  const enemy = opponent(color);
+  for (const [dr, dc] of dirs) {
+    let blocked = false;
+    for (let step = 1; step <= distance; step++) {
+      const sr = r + dr * step, sc = c + dc * step;
+      if (!inBounds(sr, sc) || board[sr][sc]) { blocked = true; break; }
+    }
+    if (blocked) continue;
+    let safe = true;
+    for (let step = 1; step < distance; step++) {
+      if (isSquareAttacked(board, r + dr * step, c + dc * step, enemy)) { safe = false; break; }
+    }
+    if (!safe) continue;
+    moves.push({ from: { r, c }, to: { r: r + dr * distance, c: c + dc * distance }, captureSquare: null, special });
   }
   return moves;
 }
@@ -201,26 +277,44 @@ function generatePseudoMoves(ctx, r, c) {
         moves.push({ from: { r, c }, to: { r: tr, c: tc }, captureSquare: { r, c: tc }, special: "enpassant" });
       }
     }
-    if (piece.upgraded) {
+    if (piece.upgrade === "longbowman") {
       const tr = r + 2 * dir, tc = c;
       const midR = r + dir;
       if (inBounds(tr, tc) && !board[midR][tc]) {
         const target = board[tr][tc];
         if (target && target.color === enemy) {
-          moves.push({ from: { r, c }, to: { r, c }, captureSquare: { r: tr, c: tc }, special: "longbow" });
+          moves.push({ from: { r, c }, to: { r, c }, captureSquare: { r: tr, c: tc }, special: "longbowman" });
         }
+      }
+    } else if (piece.upgrade === "skirmisher") {
+      const target = board[f1r][c];
+      if (inBounds(f1r, c) && target && target.color === enemy) {
+        moves.push({ from: { r, c }, to: { r: f1r, c }, captureSquare: { r: f1r, c }, special: "skirmisher", promotion: f1r === promoRow });
+      }
+    } else if (piece.upgrade === "rearguard") {
+      const br = r - dir;
+      if (inBounds(br, c) && !board[br][c]) {
+        moves.push({ from: { r, c }, to: { r: br, c }, captureSquare: null, special: "rearguard" });
       }
     }
   } else if (piece.type === "n") {
     moves.push(...knightPatternMoves(board, r, c, color, "normal"));
+    if (piece.upgrade === "feint") moves.push(...oneStepMoves(board, r, c, color, DIRS_STRAIGHT, "feint"));
+    else if (piece.upgrade === "deepstrike") moves.push(...knightPatternMoves(board, r, c, color, "deepstrike", KNIGHT_OFFSETS_LONG));
   } else if (piece.type === "b") {
     moves.push(...slideMoves(board, r, c, color, DIRS_DIAG));
-    if (piece.upgraded && !piece.upgradeUsed) moves.push(...knightPatternMoves(board, r, c, color, "blessing"));
+    if (piece.upgrade === "blessing" && !piece.upgradeUsed) moves.push(...knightPatternMoves(board, r, c, color, "blessing"));
+    else if (piece.upgrade === "vigil") moves.push(...oneStepMoves(board, r, c, color, DIRS_STRAIGHT, "vigil"));
+    else if (piece.upgrade === "anchorite") moves.push(...siegeMoves(board, r, c, color, DIRS_DIAG, "anchorite"));
   } else if (piece.type === "r") {
     moves.push(...slideMoves(board, r, c, color, DIRS_STRAIGHT));
-    if (piece.upgraded) moves.push(...siegeMoves(board, r, c, color, DIRS_STRAIGHT));
+    if (piece.upgrade === "siege") moves.push(...siegeMoves(board, r, c, color, DIRS_STRAIGHT, "siege"));
+    else if (piece.upgrade === "vanguard") moves.push(...oneStepMoves(board, r, c, color, DIRS_DIAG, "vanguard"));
+    else if (piece.upgrade === "portcullis" && !piece.upgradeUsed) moves.push(...ignoreBlockersSlide(board, r, c, color, DIRS_STRAIGHT, "portcullis"));
   } else if (piece.type === "q") {
     moves.push(...slideMoves(board, r, c, color, DIRS_DIAG.concat(DIRS_STRAIGHT)));
+    if (piece.upgrade === "regicide") moves.push(...knightPatternMoves(board, r, c, color, "regicide"));
+    else if (piece.upgrade === "diplomat") moves.push(...siegeMoves(board, r, c, color, DIRS_DIAG.concat(DIRS_STRAIGHT), "diplomat"));
   } else if (piece.type === "k") {
     for (const [dr, dc] of DIRS_8) {
       const tr = r + dr, tc = c + dc;
@@ -246,15 +340,12 @@ function generatePseudoMoves(ctx, r, c) {
         }
       }
     }
-    if (piece.upgraded && !piece.upgradeUsed) {
-      for (const [dr, dc] of DIRS_8) {
-        const mr = r + dr, mc = c + dc;
-        const tr = r + 2 * dr, tc = c + 2 * dc;
-        if (!inBounds(tr, tc)) continue;
-        if (board[mr][mc] || board[tr][tc]) continue;
-        if (isSquareAttacked(board, mr, mc, enemy)) continue;
-        moves.push({ from: { r, c }, to: { r: tr, c: tc }, captureSquare: null, special: "royalguard" });
-      }
+    if (piece.upgrade === "royalguard" && !piece.upgradeUsed) {
+      moves.push(...dashMoves(board, r, c, color, DIRS_8, 2, "royalguard"));
+    } else if (piece.upgrade === "flankguard") {
+      moves.push(...dashMoves(board, r, c, color, DIRS_STRAIGHT, 2, "flankguard"));
+    } else if (piece.upgrade === "nightmarch" && !piece.upgradeUsed) {
+      moves.push(...dashMoves(board, r, c, color, DIRS_STRAIGHT, 3, "nightmarch"));
     }
   }
   return moves;
@@ -270,7 +361,7 @@ function applyMoveToBoard(board, move, opts = {}) {
     capturedPiece = board[cr][cc];
     board[cr][cc] = null;
   }
-  if (move.special !== "longbow") {
+  if (move.special !== "longbowman") {
     board[tr][tc] = piece;
     board[fr][fc] = null;
     if (piece) piece.hasMoved = true;
@@ -284,10 +375,16 @@ function applyMoveToBoard(board, move, opts = {}) {
     board[fr][3] = rook; board[fr][0] = null;
     if (rook) rook.hasMoved = true;
   }
-  if (move.special === "blessing" && piece) piece.upgradeUsed = true;
+  // A move that exercises the piece's own installed ability, when that ability is one-time-use,
+  // consumes it. (Kingmaker's Gambit is the one exception — its bonus move is a normal queen
+  // move, so it's marked used explicitly where the bonus move is resolved.)
+  if (piece && move.special === piece.upgrade) {
+    const def = abilityDef(piece.type, piece.upgrade);
+    if (def && def.kind === "onetime") piece.upgradeUsed = true;
+  }
   if (move.promotion) {
     const promoType = opts.promoType || "q";
-    board[tr][tc] = { type: promoType, color: piece.color, hasMoved: true, upgraded: false, upgradeUsed: false };
+    board[tr][tc] = { type: promoType, color: piece.color, hasMoved: true, upgrade: null, upgradeUsed: false };
   }
   return capturedPiece;
 }
@@ -366,7 +463,7 @@ function createInitialState() {
     extraMove: null,
     pendingPromotion: null,
     upgradeInstallPicking: false,
-    upgradeConfirm: null,
+    upgradeChoosingPiece: null,
     clashSquare: null,
   };
 }
@@ -433,7 +530,7 @@ function resumeGame() {
 // ---------- move flow ----------
 
 function uiTargetFor(move) {
-  if (move.special === "longbow") return { r: move.captureSquare.r, c: move.captureSquare.c, move };
+  if (move.special === "longbowman") return { r: move.captureSquare.r, c: move.captureSquare.c, move };
   return { r: move.to.r, c: move.to.c, move };
 }
 
@@ -481,16 +578,18 @@ function describeMove(move, movedPiece, color, capturedPiece) {
   let txt;
   if (move.special === "castleK") txt = "O-O";
   else if (move.special === "castleQ") txt = "O-O-O";
-  else if (move.special === "longbow") {
+  else if (move.special === "longbowman") {
     txt = `🏹 ${algebraic(move.from.r, move.from.c)} snipes ${algebraic(move.captureSquare.r, move.captureSquare.c)}`;
   } else {
     const pl = move.promotion ? "" : (PIECE_LETTER[movedPiece.type] || "");
     const capStr = capturedPiece ? "x" : "-";
     txt = `${pl}${algebraic(move.from.r, move.from.c)}${capStr}${algebraic(move.to.r, move.to.c)}`;
-    if (move.special === "siege") txt += " (siege)";
-    else if (move.special === "blessing") txt += " (blessing)";
-    else if (move.special === "royalguard") txt += " (guard)";
-    else if (move.special === "enpassant") txt += " e.p.";
+    if (move.special === "enpassant") {
+      txt += " e.p.";
+    } else {
+      const def = abilityDef(movedPiece.type, move.special);
+      if (def) txt += ` (${def.name})`;
+    }
     if (move.promotion) txt += "=Q";
   }
   if (isKingInCheck(state.board, opponent(color))) txt += "+";
@@ -521,7 +620,7 @@ function handlePhaseTransition() {
 
 function finalizeMoveApplication(move, color, isExtra, promoType) {
   const capturedPiece = applyMoveToBoard(state.board, move, { promoType });
-  const movedPiece = move.special === "longbow" ? state.board[move.from.r][move.from.c] : state.board[move.to.r][move.to.c];
+  const movedPiece = move.special === "longbowman" ? state.board[move.from.r][move.from.c] : state.board[move.to.r][move.to.c];
 
   if (capturedPiece) { Sound.capture(); state.clashSquare = { ...move.captureSquare }; }
   else Sound.move();
@@ -549,12 +648,12 @@ function finalizeMoveApplication(move, color, isExtra, promoType) {
   }
 
   if (!isExtra) {
-    if (movedPiece && movedPiece.type === "n" && movedPiece.upgraded && capturedPiece) {
+    if (movedPiece && movedPiece.upgrade === "cavalry" && capturedPiece) {
       state.extraMove = { color, kind: "cavalry" };
       startExtraMove(move.to.r, move.to.c);
       return;
     }
-    if (movedPiece && movedPiece.type === "q" && movedPiece.upgraded && !movedPiece.upgradeUsed) {
+    if (movedPiece && movedPiece.upgrade === "kingmaker" && !movedPiece.upgradeUsed) {
       state.extraMove = { color, kind: "kingmaker" };
       startExtraMove(move.to.r, move.to.c);
       return;
@@ -611,32 +710,39 @@ function endTurn(colorThatMoved) {
 
 // ---------- upgrades ----------
 
+// The abilities for `type` a piece could still afford to install, given it hasn't upgraded yet.
+function affordableAbilities(type, color) {
+  return GameData.UPGRADES[type].filter((u) => u.cost <= state.upgradePoints[color]);
+}
+
 function hasEligiblePiece(color) {
   for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
     const p = state.board[r][c];
-    if (p && p.color === color && !p.upgraded && GameData.UPGRADES[p.type].cost <= state.upgradePoints[color]) return true;
+    if (p && p.color === color && !p.upgrade && affordableAbilities(p.type, color).length > 0) return true;
   }
   return false;
 }
 
+// Step 1: player taps one of their own eligible pieces on the board.
 function handleUpgradePieceClick(r, c) {
   const p = state.board[r][c];
-  if (!p || p.color !== state.turn || p.upgraded) { Sound.illegal(); return; }
-  const upg = GameData.UPGRADES[p.type];
-  if (state.upgradePoints[state.turn] < upg.cost) { Sound.illegal(); return; }
+  if (!p || p.color !== state.turn || p.upgrade) { Sound.illegal(); return; }
+  if (affordableAbilities(p.type, state.turn).length === 0) { Sound.illegal(); return; }
   state.upgradeInstallPicking = false;
-  state.upgradeConfirm = { r, c, type: p.type };
+  state.upgradeChoosingPiece = { r, c, type: p.type };
   render();
 }
 
-function confirmUpgrade() {
-  const { r, c, type } = state.upgradeConfirm;
+// Step 2: player picks which of that piece type's abilities to install.
+function installAbility(abilityId) {
+  const { r, c, type } = state.upgradeChoosingPiece;
+  const upg = abilityDef(type, abilityId);
+  if (!upg || upg.cost > state.upgradePoints[state.turn]) { Sound.illegal(); return; }
   const p = state.board[r][c];
-  const upg = GameData.UPGRADES[type];
-  p.upgraded = true;
+  p.upgrade = abilityId;
   state.upgradePoints[state.turn] -= upg.cost;
   state.upgradeInstalledThisTurn = true;
-  state.upgradeConfirm = null;
+  state.upgradeChoosingPiece = null;
   Sound.upgrade();
   addLogEntry(`${sideLabel(state.turn)} installs ${upg.emoji} ${upg.name} on ${algebraic(r, c)}.`, null);
   save();
@@ -646,7 +752,7 @@ function confirmUpgrade() {
 // ---------- input ----------
 
 function onSquareClick(r, c) {
-  if (state.result || state.pendingPromotion || state.upgradeConfirm) return;
+  if (state.result || state.pendingPromotion || state.upgradeChoosingPiece) return;
   if (state.upgradeInstallPicking) { handleUpgradePieceClick(r, c); return; }
   if (state.extraMove) {
     const target = state.legalTargets.find((t) => t.r === r && t.c === c);
@@ -687,7 +793,7 @@ function bindEvents() {
 
   document.addEventListener("keydown", (e) => {
     if (state.screen !== "playing") return;
-    if (state.pendingPromotion || state.upgradeConfirm) return;
+    if (state.pendingPromotion || state.upgradeChoosingPiece) return;
     const cur = state.cursor || { r: 6, c: 4 };
     let { r, c } = cur;
     if (e.key === "ArrowUp") r = Math.max(0, r - 1);
@@ -737,11 +843,11 @@ function handleAction(action, el) {
       state.upgradeInstallPicking = false;
       render();
       break;
-    case "confirm-upgrade":
-      confirmUpgrade();
+    case "install-ability":
+      installAbility(el.getAttribute("data-ability"));
       break;
     case "cancel-upgrade":
-      state.upgradeConfirm = null;
+      state.upgradeChoosingPiece = null;
       render();
       break;
     case "skip-extra":
@@ -777,13 +883,13 @@ function squareClass(r, c) {
   if (state.lastMove && ((state.lastMove.from.r === r && state.lastMove.from.c === c) || (state.lastMove.to.r === r && state.lastMove.to.c === c))) classes.push("last-to");
   if (state.clashSquare && state.clashSquare.r === r && state.clashSquare.c === c) classes.push("clash");
   const p = state.board[r][c];
-  if (p && p.upgraded) classes.push("upgraded");
+  if (p && p.upgrade) classes.push("upgraded");
   if (!state.result && isKingInCheck(state.board, state.turn)) {
     const k = findKing(state.board, state.turn);
     if (k && k.r === r && k.c === c) classes.push("in-check");
   }
   if (state.upgradeInstallPicking) {
-    if (p && p.color === state.turn && !p.upgraded && GameData.UPGRADES[p.type].cost <= state.upgradePoints[state.turn]) classes.push("upgrade-eligible");
+    if (p && p.color === state.turn && !p.upgrade && affordableAbilities(p.type, state.turn).length > 0) classes.push("upgrade-eligible");
   }
   return classes.join(" ");
 }
@@ -792,7 +898,11 @@ function renderSquareContent(r, c) {
   const p = state.board[r][c];
   let inner = "";
   if (p) {
-    const badge = p.upgraded ? `<span class="badge" style="opacity:${p.upgradeUsed ? 0.4 : 1}">${GameData.UPGRADES[p.type].emoji}</span>` : "";
+    let badge = "";
+    if (p.upgrade) {
+      const def = abilityDef(p.type, p.upgrade);
+      badge = `<span class="badge" style="opacity:${p.upgradeUsed ? 0.4 : 1}">${def ? def.emoji : "⚡"}</span>`;
+    }
     inner += `<span class="piece ${p.color}">${PIECE_GLYPH[p.type]}</span>${badge}`;
   }
   const isTarget = state.legalTargets.some((t) => t.r === r && t.c === c);
@@ -889,19 +999,25 @@ function renderModals() {
           </div>
         </div>
       </div>`;
-  } else if (state.upgradeConfirm) {
-    const { type } = state.upgradeConfirm;
-    const upg = GameData.UPGRADES[type];
+  } else if (state.upgradeChoosingPiece) {
+    const { type } = state.upgradeChoosingPiece;
+    const options = GameData.UPGRADES[type];
     html += `
       <div class="overlay">
         <div class="modal">
-          <h2>${upg.emoji} ${upg.name}</h2>
-          <p>${upg.description}</p>
-          <p>Cost: ${upg.cost} UP — ${upg.kind === "onetime" ? "one-time use" : "permanent ability"}</p>
-          <div class="choice-row">
-            <button data-action="confirm-upgrade">Install</button>
-            <button data-action="cancel-upgrade">Cancel</button>
-          </div>
+          <h2>⚡ Choose an ability</h2>
+          <p>${PIECE_LETTER[type] ? PIECE_LETTER[type] + " — " : "Pawn — "}pick one; it's permanent for this piece.</p>
+          ${options.map((u) => {
+            const affordable = u.cost <= state.upgradePoints[state.turn];
+            return `
+            <button class="upgrade-option" data-action="install-ability" data-ability="${u.id}" ${affordable ? "" : "disabled"}>
+              <span class="em">${u.emoji}</span>
+              <span class="info"><b>${u.name}</b> — ${u.cost} UP, ${u.kind === "onetime" ? "one-time" : "permanent"}
+                <small>${u.description}</small>
+              </span>
+            </button>`;
+          }).join("")}
+          <div class="choice-row"><button data-action="cancel-upgrade">Cancel</button></div>
         </div>
       </div>`;
   } else if (state.showRules) {
@@ -912,10 +1028,16 @@ function renderModals() {
           <ul>
             <li><b>Plies 0–${GameData.PHASES.phase2StartPly - 1}:</b> normal chess.</li>
             <li><b>Ply ${GameData.PHASES.phase2StartPly}+:</b> the Wars of the Roses begin — cosmetic only.</li>
-            <li><b>Ply ${GameData.PHASES.phase3StartPly}+:</b> Upgrade Points unlock. Earn 1 UP per capture, plus reinforcements every ${GameData.PHASES.reinforcementInterval} plies.</li>
+            <li><b>Ply ${GameData.PHASES.phase3StartPly}+:</b> Upgrade Points unlock. Earn 1 UP per capture, plus reinforcements every ${GameData.PHASES.reinforcementInterval} plies. Each piece may install one ability of its choice, once.</li>
           </ul>
           <ul class="upgrade-list">
-            ${Object.entries(GameData.UPGRADES).map(([type, u]) => `<li>${u.emoji} <b>${u.name}</b> (${PIECE_LETTER[type] || "Pawn"}, ${u.cost} UP): ${u.description}</li>`).join("")}
+            ${Object.entries(GameData.UPGRADES).map(([type, list]) => `
+              <li><b>${PIECE_LETTER[type] || "Pawn"}</b>
+                <ul>
+                  ${list.map((u) => `<li>${u.emoji} <b>${u.name}</b> (${u.cost} UP, ${u.kind === "onetime" ? "one-time" : "permanent"}): ${u.description}</li>`).join("")}
+                </ul>
+              </li>
+            `).join("")}
           </ul>
           <div class="choice-row"><button data-action="close-rules">Close</button></div>
         </div>

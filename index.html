@@ -1,8 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="gate-locked">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Runs synchronously before first paint so an already-unlocked visitor
+      // never sees the gate flash. Keep GATE_HASH/GATE_KEY in sync with the
+      // unlock script near the end of <body>.
+      (function () {
+        var GATE_HASH = "707ea0dc31e9ff786cfa067dde842f51af74be37f982dc3c931a8169569d0914";
+        var GATE_KEY = "demos_gate";
+        try {
+          if (localStorage.getItem(GATE_KEY) === GATE_HASH) {
+            document.documentElement.classList.remove("gate-locked");
+          }
+        } catch (err) {
+          // localStorage unavailable (e.g. some private-browsing modes) —
+          // fall through and just show the gate every time.
+        }
+      })();
+    </script>
     <title>Demos</title>
     <style>
       :root {
@@ -13,6 +30,7 @@
         --accent-dim: #1d8b96;
         --text: #d6f4f7;
         --text-dim: #6f8894;
+        --error: #ff6b6b;
       }
 
       * {
@@ -48,6 +66,10 @@
       main {
         width: min(600px, 90vw);
         padding: 32px;
+      }
+
+      .gate-locked main {
+        display: none;
       }
 
       .eyebrow {
@@ -119,9 +141,85 @@
         font-size: 0.85rem;
         color: var(--text-dim);
       }
+
+      #gate {
+        display: none;
+        width: min(400px, 90vw);
+        padding: 32px;
+      }
+
+      .gate-locked #gate {
+        display: block;
+      }
+
+      #gate-input {
+        width: 100%;
+        padding: 12px 14px;
+        margin: 0 0 14px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        color: var(--text);
+        font-family: inherit;
+        font-size: 1rem;
+        outline: none;
+      }
+
+      #gate-input:focus {
+        border-color: var(--accent);
+      }
+
+      #gate button {
+        width: 100%;
+        padding: 12px 14px;
+        background: var(--accent-dim);
+        border: 1px solid var(--accent);
+        color: var(--bg);
+        font-family: inherit;
+        font-size: 0.9rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        cursor: pointer;
+        clip-path: polygon(
+          0 0,
+          calc(100% - 10px) 0,
+          100% 10px,
+          100% 100%,
+          10px 100%,
+          0 calc(100% - 10px)
+        );
+        transition: background 0.2s ease;
+      }
+
+      #gate button:hover {
+        background: var(--accent);
+      }
+
+      .gate-error {
+        margin: 14px 0 0;
+        font-size: 0.85rem;
+        color: var(--error);
+      }
     </style>
   </head>
   <body>
+    <div id="gate">
+      <form id="gate-form">
+        <p class="eyebrow">Access restricted</p>
+        <h1>Enter passcode</h1>
+        <input
+          id="gate-input"
+          type="password"
+          inputmode="text"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder="passcode"
+        />
+        <button type="submit">Unlock</button>
+        <p id="gate-error" class="gate-error" hidden>Wrong passcode — try again.</p>
+      </form>
+    </div>
     <main>
       <p class="eyebrow">Select simulation</p>
       <h1>Demos</h1>
@@ -168,5 +266,49 @@
         </a>
       </div>
     </main>
+    <script>
+      (function () {
+        var GATE_HASH = "707ea0dc31e9ff786cfa067dde842f51af74be37f982dc3c931a8169569d0914";
+        var GATE_KEY = "demos_gate";
+
+        function sha256Hex(text) {
+          var data = new TextEncoder().encode(text);
+          return crypto.subtle.digest("SHA-256", data).then(function (buf) {
+            return Array.prototype.map
+              .call(new Uint8Array(buf), function (b) {
+                return b.toString(16).padStart(2, "0");
+              })
+              .join("");
+          });
+        }
+
+        var form = document.getElementById("gate-form");
+        var input = document.getElementById("gate-input");
+        var error = document.getElementById("gate-error");
+
+        if (document.documentElement.classList.contains("gate-locked")) {
+          input.focus();
+        }
+
+        form.addEventListener("submit", function (evt) {
+          evt.preventDefault();
+          sha256Hex(input.value).then(function (hash) {
+            if (hash === GATE_HASH) {
+              try {
+                localStorage.setItem(GATE_KEY, hash);
+              } catch (err) {
+                // No persistence available — still unlock for this load.
+              }
+              error.hidden = true;
+              document.documentElement.classList.remove("gate-locked");
+            } else {
+              error.hidden = false;
+              input.value = "";
+              input.focus();
+            }
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

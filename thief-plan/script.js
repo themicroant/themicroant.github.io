@@ -4,7 +4,7 @@
 const SAVE_KEY = "thief_plan_save";
 
 // ---------------------------------------------------------------------------
-// Grid construction — builds the 11x11 cell matrix from game-data.js's room
+// Grid construction — builds the GRID_ROWS x GRID_COLS cell matrix from game-data.js's room
 // rectangles. See docs/requirements.md §3.
 // ---------------------------------------------------------------------------
 
@@ -158,6 +158,13 @@ function save() {
   }
 }
 
+// Every state-mutating handler ends by persisting and re-rendering — call this instead of the
+// pair directly so a future handler can't silently skip save() and lose progress on refresh.
+function commit() {
+  save();
+  render();
+}
+
 let state = loadSave() || freshState();
 // moveDraft never persists across reloads (an in-progress, unconfirmed move) — always resume clean.
 state.moveDraft = [];
@@ -200,8 +207,7 @@ function startRound() {
   };
   log(`Entered the museum through ${doorRoomName(entrance)}.`);
   state.screen = "playing";
-  save();
-  render();
+  commit();
 }
 
 function resolvePendingRemoval() {
@@ -227,8 +233,7 @@ function confirmMove() {
   const destCell = cellAt(round.position.row, round.position.col);
   log(`Turn ${round.turn}: moved ${steps.length} space${steps.length > 1 ? "s" : ""} to ${destCell.name}.`);
   state.moveDraft = [];
-  save();
-  render();
+  commit();
 }
 
 function cancelMoveDraft() {
@@ -265,8 +270,7 @@ function snatchPainting() {
   round.pendingRemoval = { row: round.position.row, col: round.position.col };
   const cell = cellAt(round.position.row, round.position.col);
   log(`Turn ${round.turn}: snatched the painting in ${cell.name} (circled — removed after next move).`);
-  save();
-  render();
+  commit();
 }
 
 function disconnectCamera() {
@@ -276,16 +280,14 @@ function disconnectCamera() {
   if (!cam || cam.disconnected) return;
   cam.disconnected = true;
   log(`Turn ${round.turn}: disconnected Camera ${cam.number}.`);
-  save();
-  render();
+  commit();
 }
 
 function togglePower() {
   const round = state.round;
   round.powerOff = !round.powerOff;
   log(round.powerOff ? `Turn ${round.turn}: turned off all Cameras & Motion Detectors.` : `Turn ${round.turn}: power's back on.`);
-  save();
-  render();
+  commit();
 }
 
 function disconnectMotionDetector() {
@@ -293,8 +295,7 @@ function disconnectMotionDetector() {
   if (round.motionDetectorUses >= GameData.MOTION_DETECTOR_USES) return;
   round.motionDetectorUses++;
   log(`Turn ${round.turn}: disconnected the Motion Detectors (${round.motionDetectorUses}/${GameData.MOTION_DETECTOR_USES} used).`);
-  save();
-  render();
+  commit();
 }
 
 function markSeen() {
@@ -302,8 +303,7 @@ function markSeen() {
   if (round.seen) return;
   round.seen = true;
   log(`Turn ${round.turn}: spotted! Pawn placed on the board.`);
-  save();
-  render();
+  commit();
 }
 
 function markCaught() {
@@ -312,8 +312,7 @@ function markCaught() {
   round.outcome = "caught";
   log(`Turn ${round.turn}: caught! The Characters win the round.`);
   state.screen = "summary";
-  save();
-  render();
+  commit();
 }
 
 function markEscaped(doorPoint) {
@@ -322,14 +321,12 @@ function markEscaped(doorPoint) {
   round.exitPoint = doorPoint;
   log(`Turn ${round.turn}: escaped through ${doorRoomName(doorPoint)}! Round won.`);
   state.screen = "summary";
-  save();
-  render();
+  commit();
 }
 
 function newRound() {
   state = freshState();
-  save();
-  render();
+  commit();
 }
 
 // ---------------------------------------------------------------------------
@@ -359,8 +356,7 @@ function handleSetupCellTap(row, col) {
     if (!DOOR_KEYS.has(key)) return;
     setup.entrance = { row, col };
   }
-  save();
-  render();
+  commit();
 }
 
 function setupStepReady() {
@@ -376,15 +372,13 @@ const SETUP_STEPS = ["paintings", "cameras", "entrance", "review"];
 function setupStepNext() {
   const i = SETUP_STEPS.indexOf(state.setup.step);
   if (i < SETUP_STEPS.length - 1) state.setup.step = SETUP_STEPS[i + 1];
-  save();
-  render();
+  commit();
 }
 
 function setupStepBack() {
   const i = SETUP_STEPS.indexOf(state.setup.step);
   if (i > 0) state.setup.step = SETUP_STEPS[i - 1];
-  save();
-  render();
+  commit();
 }
 
 // ---------------------------------------------------------------------------
@@ -515,7 +509,7 @@ function setupHTML() {
     <ul class="review-list">
       <li>🖼️ ${setup.paintings.length} paintings marked</li>
       <li>📷 ${setup.cameras.length} cameras marked</li>
-      <li>🚪 Entrance: ${doorRoomName(setup.entrance)}</li>
+      <li>🚪 Entrance: ${escapeHtml(doorRoomName(setup.entrance))}</li>
     </ul>
     <button id="begin-btn" class="primary">Begin Heist 🕵️</button>
   ` : "";
@@ -594,7 +588,7 @@ function playHTML() {
   const mdLeft = GameData.MOTION_DETECTOR_USES - mdUsed;
 
   const doorButtons = GameData.DOOR_POINTS.map(
-    (d) => `<button class="door-choice" data-row="${d.row}" data-col="${d.col}">${doorRoomName(d)}</button>`
+    (d) => `<button class="door-choice" data-row="${d.row}" data-col="${d.col}">${escapeHtml(doorRoomName(d))}</button>`
   ).join("");
 
   // Bottom legend strip, styled after the reference pad's own: crossed-off "M M" + pliers, and a

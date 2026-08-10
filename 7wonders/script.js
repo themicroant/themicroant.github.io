@@ -61,6 +61,12 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// The hand is a responsive CSS grid (column count varies by viewport width), so Up/Down arrow
+// navigation reads the live column count from computed style rather than assuming a fixed value.
+function gridColumnCount(gridEl) {
+  return getComputedStyle(gridEl).gridTemplateColumns.split(" ").filter(Boolean).length || 1;
+}
+
 // ---- rendering ----
 
 function renderCard(card, isSelected, isTabbable) {
@@ -177,12 +183,10 @@ function render(opts = {}) {
       </div>
     </div>
     <div class="hand-prompt">Choose <strong>1 card</strong> to play this turn.</div>
-    <div class="hand-scroll">
-      <div class="hand" role="listbox" aria-label="Your hand" id="hand">
-        ${state.hand
-          .map((card) => renderCard(card, card.id === state.selectedId, card.id === tabbableId))
-          .join("")}
-      </div>
+    <div class="hand" role="listbox" aria-label="Your hand" id="hand">
+      ${state.hand
+        .map((card) => renderCard(card, card.id === state.selectedId, card.id === tabbableId))
+        .join("")}
     </div>
     <div class="confirm-bar">
       <div class="confirm-info">${
@@ -203,9 +207,12 @@ function render(opts = {}) {
 
   hand.addEventListener("keydown", (e) => {
     const currentIndex = cards.findIndex((el) => el === document.activeElement);
+    const cols = gridColumnCount(hand);
     let nextIndex = null;
     if (e.key === "ArrowRight") nextIndex = Math.min(cards.length - 1, Math.max(0, currentIndex) + 1);
     else if (e.key === "ArrowLeft") nextIndex = Math.max(0, currentIndex - 1);
+    else if (e.key === "ArrowDown") nextIndex = Math.min(cards.length - 1, Math.max(0, currentIndex) + cols);
+    else if (e.key === "ArrowUp") nextIndex = Math.max(0, currentIndex - cols);
     else if (e.key === "Home") nextIndex = 0;
     else if (e.key === "End") nextIndex = cards.length - 1;
     else if (e.key === "Enter" || e.key === " ") {
@@ -218,7 +225,7 @@ function render(opts = {}) {
     if (nextIndex !== null) {
       e.preventDefault();
       cards[nextIndex].focus();
-      cards[nextIndex].scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      cards[nextIndex].scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
     }
   });
 

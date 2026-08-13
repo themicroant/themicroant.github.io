@@ -44,7 +44,7 @@ const DOOR_KEYS = new Set(GameData.DOOR_POINTS.map((d) => keyOf(d.row, d.col)));
 // The Power room carries a printed "P" label (like the physical board's own Security Command
 // Center marking) on one of its cells — not a Thief-drawn mark, so it always shows and doesn't
 // use the pink ink, but a camera placed on that same cell still takes visual priority.
-const POWER_LABEL_KEY = keyOf(GameData.POWER_ROOM.rows[0], GameData.POWER_ROOM.cols[0]);
+const POWER_LABEL_KEY = keyOf(GameData.POWER_ROOM.rows[1], GameData.POWER_ROOM.cols[1]);
 
 function cellAt(row, col) {
   if (row < 0 || col < 0 || row >= GameData.GRID_ROWS || col >= GameData.GRID_COLS) return null;

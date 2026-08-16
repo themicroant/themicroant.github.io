@@ -124,67 +124,91 @@ html, body {
 }
 .card.unaffordable { opacity: 0.65; }
 
-.card-head {
-  padding: 8px 6px 7px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-}
-.card-emoji { font-size: 1.9rem; line-height: 1; }
-.card-name {
-  font-size: 0.82rem;
-  font-weight: 700;
+/* Grid tiles are art-forward: a thin name bar, then a large image with a handful of small
+   glanceable badges. Full detail (cost breakdown, effect text, chain info) lives in the action
+   bar once a card is selected — see .selected-detail below — rather than crammed onto every
+   tile in the hand at once. */
+.card-name-bar {
+  padding: 5px 6px 4px;
   text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
   line-height: 1.15;
 }
-.card-type-label {
-  font-size: 0.58rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  opacity: 0.9;
-  text-align: center;
-}
-.card-body {
-  background: var(--bg-2);
-  padding: 7px 7px 8px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.card-art {
+  position: relative;
+  aspect-ratio: 0.82;
+  background-size: cover;
+  background-position: center;
   border-top: 1px solid var(--border);
+}
+.card-emoji-badge {
+  position: absolute; top: 6px; right: 6px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(12, 18, 16, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; line-height: 1;
+}
+.card-lock-badge {
+  position: absolute; top: 6px; left: 6px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(12, 18, 16, 0.75);
+  border: 1px solid rgba(224, 85, 94, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.78rem; line-height: 1;
+}
+.card-cost-pill, .card-value-badge {
+  position: absolute; bottom: 6px;
+  background: rgba(12, 18, 16, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex; align-items: center; gap: 3px;
+  line-height: 1;
+}
+.card-cost-pill { left: 6px; }
+.card-value-badge { right: 6px; color: var(--accent); }
+
+/* ---- selected-card detail (inside the action bar) ---- */
+.selected-detail { display: flex; flex-direction: column; gap: 6px; }
+.selected-detail .selected-title {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+}
+.selected-detail .selected-title strong { font-size: 0.95rem; color: var(--accent); }
+.selected-detail .selected-title .selected-type {
+  font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em;
 }
 .card-row {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
 }
-.card-row .label { color: var(--text-dim); font-size: 0.62rem; }
+.card-row .label { color: var(--text-dim); font-size: 0.68rem; }
 .icon-badge {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   background: var(--bg-3);
   border-radius: 5px;
-  padding: 1px 4px;
-  font-size: 0.72rem;
+  padding: 2px 5px;
+  font-size: 0.78rem;
 }
-.lock-badge {
-  margin-left: auto;
-  font-size: 0.8rem;
-}
+.lock-badge { margin-left: auto; font-size: 0.85rem; }
 .card-effect {
-  font-size: 0.64rem;
+  font-size: 0.72rem;
   color: var(--text-dim);
-  line-height: 1.3;
+  line-height: 1.35;
   font-style: italic;
 }
 .card-chain {
-  font-size: 0.6rem;
+  font-size: 0.68rem;
   color: var(--good);
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 /* ---- rivals strip ---- */

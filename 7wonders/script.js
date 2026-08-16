@@ -43,9 +43,67 @@ function gridColumnCount(gridEl) {
   return getComputedStyle(gridEl).gridTemplateColumns.split(" ").filter(Boolean).length || 1;
 }
 
+// Picks a card-art image (GameData.CARD_ART.pool) for this card. Only 3 images exist for 88
+// cards, so this deterministically hashes the card's own id into the shared pool — the same
+// card always shows the same art on every render (not random/flickering), spread evenly across
+// all cards rather than grouped by type (see game-data.js's CARD_ART comment for why).
+function cardArtUrl(card) {
+  const pool = GameData.CARD_ART.pool;
+  let hash = 0;
+  for (let i = 0; i < card.id.length; i++) hash = (hash * 31 + card.id.charCodeAt(i)) >>> 0;
+  return pool[hash % pool.length];
+}
+
+// The single most important stat to surface as a glanceable badge on a grid tile, by card type
+// — everything else (full cost breakdown, effect text, chain info) lives in the selected-card
+// detail panel instead, not on every tile at once.
+function primaryValueBadge(card) {
+  if ((card.type === "civilian" || card.type === "guild") && card.vp) return `🏆 ${card.vp}`;
+  if (card.type === "commercial" && card.coinsOnPlay) return `🪙+${card.coinsOnPlay}`;
+  if (card.type === "scientific" && card.science) return GameData.SCIENCE_SYMBOLS[card.science].emoji;
+  if (card.type === "military" && card.shields) return `🛡️${card.shields}`;
+  if ((card.type === "raw" || card.type === "manufactured") && card.produceCount > 1) return `×${card.produceCount}`;
+  return null;
+}
+
 // ---- card rendering (hand screen) ----
 
 function renderCard(game, card, isSelected, isTabbable) {
+  const type = GameData.CARD_TYPES[card.type];
+  const actions = GameEngine.getAvailableActionsForCard(game, 0, card.id);
+  const cost = costEntries(card.cost);
+  const value = primaryValueBadge(card);
+
+  const costLabel = actions.isFreeViaChain
+    ? "⛓️ Free"
+    : cost.length
+      ? cost.map((c) => `${c.icon}${c.count > 1 ? c.count : ""}`).join(" ")
+      : "Free";
+
+  return `
+    <button
+      type="button"
+      class="card${!actions.canBuild ? " unaffordable" : ""}"
+      role="option"
+      data-id="${card.id}"
+      aria-selected="${isSelected}"
+      tabindex="${isTabbable ? "0" : "-1"}"
+    >
+      <div class="card-name-bar" style="background:${type.colorDim}; color:${type.color};">${escapeHtml(card.name)}</div>
+      <div class="card-art" style="background-image: url('${cardArtUrl(card)}');">
+        <div class="card-emoji-badge">${card.emoji}</div>
+        ${!actions.canBuild ? '<div class="card-lock-badge" title="Cannot currently afford">🔒</div>' : ""}
+        <div class="card-cost-pill">${costLabel}</div>
+        ${value ? `<div class="card-value-badge">${value}</div>` : ""}
+      </div>
+    </button>
+  `;
+}
+
+// Full detail for the currently-selected card — cost breakdown, produce/VP/shields/science/coin
+// badges, effect text, chain hints — shown once, in the action bar, rather than crammed onto
+// every tile in the hand at once (see renderCard above).
+function cardDetailHtml(game, card) {
   const type = GameData.CARD_TYPES[card.type];
   const actions = GameEngine.getAvailableActionsForCard(game, 0, card.id);
   const cost = costEntries(card.cost);
@@ -87,30 +145,17 @@ function renderCard(game, card, isSelected, isTabbable) {
       : "";
 
   return `
-    <button
-      type="button"
-      class="card${!actions.canBuild ? " unaffordable" : ""}"
-      role="option"
-      data-id="${card.id}"
-      aria-selected="${isSelected}"
-      tabindex="${isTabbable ? "0" : "-1"}"
-    >
-      <div class="card-head" style="background:${type.colorDim}; color:${type.color};">
-        <div class="card-emoji">${card.emoji}</div>
-        <div class="card-name">${escapeHtml(card.name)}</div>
-        <div class="card-type-label">${type.label}</div>
-      </div>
-      <div class="card-body">
-        ${costRow}
-        ${produceBadges}
-        ${scienceBadge}
-        ${vpBadge}
-        ${shieldBadge}
-        ${coinBadge}
-        <div class="card-effect">${escapeHtml(card.effect)}</div>
-        ${chainRow}
-      </div>
-    </button>
+    <div class="selected-detail">
+      <div class="selected-title">${card.emoji} <strong>${escapeHtml(card.name)}</strong> <span class="selected-type">${type.label}</span></div>
+      ${costRow}
+      ${produceBadges}
+      ${scienceBadge}
+      ${vpBadge}
+      ${shieldBadge}
+      ${coinBadge}
+      <div class="card-effect">${escapeHtml(card.effect)}</div>
+      ${chainRow}
+    </div>
   `;
 }
 
@@ -209,7 +254,7 @@ function renderActionBar(game, card) {
       : "Cannot afford";
   return `
     <div class="action-bar" id="action-bar-slot">
-      <div class="selected-label">Selected: <strong>${escapeHtml(card.name)}</strong></div>
+      ${cardDetailHtml(game, card)}
       <div class="action-buttons">
         <button type="button" class="action-btn build" id="act-build" ${actions.canBuild ? "" : "disabled"}>
           <span class="action-title">🔨 Build</span><span class="action-sub">${buildSub}</span>

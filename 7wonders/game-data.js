@@ -30,6 +30,15 @@ const GameData = {
     gear:    { label: "Gear",    emoji: "⚙️" },
   },
 
+  // Illustration art for card faces (game/images/). Only 3 images exist for 88 cards, so there's
+  // no realistic per-type dedication (that would make e.g. every civilian card — nearly a third
+  // of the deck — show the exact same photo). Instead script.js's cardArtUrl() hashes each
+  // card's own id into this one shared pool, deterministically (same card always shows the same
+  // art) but spread evenly across all types for more variety within any given hand.
+  CARD_ART: {
+    pool: ["images/civ-baths.jpg", "images/comm-tavern-b.jpg", "images/sci-workshop-b.jpg"],
+  },
+
   // Base game only — the Leaders expansion and the 2-player "Free City" variant (see
   // docs/rules.md) are not implemented. Content below is sized for 3-4 players; the same fixed
   // pool is reused regardless of player count (a documented simplification — the physical game

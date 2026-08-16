@@ -14,20 +14,33 @@ const GameData = {
     guild:        { label: "Guild",               color: "#b489d6", colorDim: "#3a2a49" },
   },
 
+  // `icon` is the illustrated artwork (game/images/icons/); `emoji` stays as a fallback for
+  // contexts that can't render an <img> (e.g. admin.html's raw JSON view) and as short
+  // alt/title text — see script.js's resIcon()/sciIcon() helpers.
   RESOURCES: {
-    wood:    { label: "Wood",    emoji: "🪵" },
-    clay:    { label: "Clay",    emoji: "🧱" },
-    ore:     { label: "Ore",     emoji: "⛏️" },
-    stone:   { label: "Stone",   emoji: "🪨" },
-    glass:   { label: "Glass",   emoji: "🔷" },
-    loom:    { label: "Loom",    emoji: "🧵" },
-    papyrus: { label: "Papyrus", emoji: "📜" },
+    wood:    { label: "Wood",    emoji: "🪵", icon: "images/icons/res-wood.png" },
+    clay:    { label: "Clay",    emoji: "🧱", icon: "images/icons/res-clay.png" },
+    ore:     { label: "Ore",     emoji: "⛏️", icon: "images/icons/res-ore.png" },
+    stone:   { label: "Stone",   emoji: "🪨", icon: "images/icons/res-stone.png" },
+    glass:   { label: "Glass",   emoji: "🔷", icon: "images/icons/res-glass.png" },
+    loom:    { label: "Loom",    emoji: "🧵", icon: "images/icons/res-loom.png" },
+    papyrus: { label: "Papyrus", emoji: "📜", icon: "images/icons/res-papyrus.png" },
   },
 
   SCIENCE_SYMBOLS: {
-    tablet:  { label: "Tablet",  emoji: "📚" },
-    compass: { label: "Compass", emoji: "🧭" },
-    gear:    { label: "Gear",    emoji: "⚙️" },
+    tablet:  { label: "Tablet",  emoji: "📚", icon: "images/icons/sym-tablet.png" },
+    compass: { label: "Compass", emoji: "🧭", icon: "images/icons/sym-compass.png" },
+    gear:    { label: "Gear",    emoji: "⚙️", icon: "images/icons/sym-gear.png" },
+  },
+
+  // Non-resource illustrated icons, same provenance/rationale as RESOURCES/SCIENCE_SYMBOLS above.
+  ICONS: {
+    vp:       "images/icons/sym-vp.png",       // laurel wreath — victory points
+    coins:    "images/icons/sym-coins.png",    // gold coin
+    shields:  "images/icons/sym-shields.png",  // crossed swords on a shield — military strength
+    chain:    "images/icons/sym-chain.png",    // carved arrow — free-build chain unlock
+    conflict: "images/icons/sym-conflict.png", // helmet + shield + arrows — military conflict resolution
+    wonder:   "images/icons/sym-wonder.png",   // pyramid — generic "Wonder" glyph
   },
 
   // Illustration art for card faces (game/images/). Only 3 images exist for 88 cards, so there's

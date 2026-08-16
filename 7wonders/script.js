@@ -31,10 +31,30 @@ function formatChainList(ids) {
 }
 
 function costEntries(cost) {
-  return Object.entries(cost || {}).map(([key, count]) => {
-    const icon = key === "coins" ? "🪙" : (GameData.RESOURCES[key]?.emoji || "?");
-    return { key, count, icon };
-  });
+  return Object.entries(cost || {}).map(([key, count]) => ({ key, count }));
+}
+
+// Renders one of the illustrated icons (GameData.ICONS / RESOURCES[x].icon / SCIENCE_SYMBOLS[x].icon)
+// inline. `size` is a CSS length (default matches surrounding text height); alt text comes from
+// the resource/symbol label so the icon isn't silent to screen readers.
+function iconImg(src, alt, size) {
+  return `<img class="icon-img" src="${src}" alt="${escapeHtml(alt || "")}" style="${size ? `--icon-size:${size};` : ""}">`;
+}
+
+function resIcon(key, size) {
+  const r = GameData.RESOURCES[key];
+  return r ? iconImg(r.icon, r.label, size) : "";
+}
+
+function sciIcon(key, size) {
+  const s = GameData.SCIENCE_SYMBOLS[key];
+  return s ? iconImg(s.icon, s.label, size) : "";
+}
+
+// A resource-or-coins icon, for cost entries where the special "coins" pseudo-resource can appear
+// alongside real resources (see costEntries/effectiveCost in engine.js).
+function costIcon(key, size) {
+  return key === "coins" ? iconImg(GameData.ICONS.coins, "Coins", size) : resIcon(key, size);
 }
 
 // The hand is a responsive CSS grid (column count varies by viewport width), so Up/Down arrow
@@ -58,10 +78,10 @@ function cardArtUrl(card) {
 // — everything else (full cost breakdown, effect text, chain info) lives in the selected-card
 // detail panel instead, not on every tile at once.
 function primaryValueBadge(card) {
-  if ((card.type === "civilian" || card.type === "guild") && card.vp) return `🏆 ${card.vp}`;
-  if (card.type === "commercial" && card.coinsOnPlay) return `🪙+${card.coinsOnPlay}`;
-  if (card.type === "scientific" && card.science) return GameData.SCIENCE_SYMBOLS[card.science].emoji;
-  if (card.type === "military" && card.shields) return `🛡️${card.shields}`;
+  if ((card.type === "civilian" || card.type === "guild") && card.vp) return `${iconImg(GameData.ICONS.vp, "VP")} ${card.vp}`;
+  if (card.type === "commercial" && card.coinsOnPlay) return `${iconImg(GameData.ICONS.coins, "Coins")}+${card.coinsOnPlay}`;
+  if (card.type === "scientific" && card.science) return sciIcon(card.science);
+  if (card.type === "military" && card.shields) return `${iconImg(GameData.ICONS.shields, "Shields")}${card.shields}`;
   if ((card.type === "raw" || card.type === "manufactured") && card.produceCount > 1) return `×${card.produceCount}`;
   return null;
 }
@@ -75,9 +95,9 @@ function renderCard(game, card, isSelected, isTabbable) {
   const value = primaryValueBadge(card);
 
   const costLabel = actions.isFreeViaChain
-    ? "⛓️ Free"
+    ? `${iconImg(GameData.ICONS.chain, "Chain")} Free`
     : cost.length
-      ? cost.map((c) => `${c.icon}${c.count > 1 ? c.count : ""}`).join(" ")
+      ? cost.map((c) => `${costIcon(c.key)}${c.count > 1 ? c.count : ""}`).join(" ")
       : "Free";
 
   return `
@@ -88,8 +108,9 @@ function renderCard(game, card, isSelected, isTabbable) {
       data-id="${card.id}"
       aria-selected="${isSelected}"
       tabindex="${isTabbable ? "0" : "-1"}"
+      style="--card-type-color: ${type.color};"
     >
-      <div class="card-name-bar" style="background:${type.colorDim}; color:${type.color};">${escapeHtml(card.name)}</div>
+      <div class="card-name-bar">${escapeHtml(card.name)}</div>
       <div class="card-art" style="background-image: url('${cardArtUrl(card)}');">
         <div class="card-emoji-badge">${card.emoji}</div>
         ${!actions.canBuild ? '<div class="card-lock-badge" title="Cannot currently afford">🔒</div>' : ""}
@@ -110,38 +131,38 @@ function cardDetailHtml(game, card) {
 
   const produceBadges = card.produces.length
     ? `<div class="card-row"><span class="label">Produces</span>${card.produces
-        .map((r) => `<span class="icon-badge">${GameData.RESOURCES[r].emoji}${card.produceCount > 1 ? `×${card.produceCount}` : ""}</span>`)
+        .map((r) => `<span class="icon-badge">${resIcon(r)}${card.produceCount > 1 ? `×${card.produceCount}` : ""}</span>`)
         .join(card.producesChoice ? '<span class="label">or</span>' : "")}</div>`
     : "";
 
   const scienceBadge = card.science
-    ? `<div class="card-row"><span class="label">Science</span><span class="icon-badge">${GameData.SCIENCE_SYMBOLS[card.science].emoji}</span></div>`
+    ? `<div class="card-row"><span class="label">Science</span><span class="icon-badge">${sciIcon(card.science)}</span></div>`
     : "";
 
   const vpBadge = card.vp
-    ? `<div class="card-row"><span class="label">VP</span><span class="icon-badge">🏆 ${card.vp}</span></div>`
+    ? `<div class="card-row"><span class="label">VP</span><span class="icon-badge">${iconImg(GameData.ICONS.vp, "VP")} ${card.vp}</span></div>`
     : "";
 
   const shieldBadge = card.shields
-    ? `<div class="card-row"><span class="label">Military</span><span class="icon-badge">🛡️ ${card.shields}</span></div>`
+    ? `<div class="card-row"><span class="label">Military</span><span class="icon-badge">${iconImg(GameData.ICONS.shields, "Shields")} ${card.shields}</span></div>`
     : "";
 
   const coinBadge = card.coinsOnPlay
-    ? `<div class="card-row"><span class="label">On build</span><span class="icon-badge">🪙 +${card.coinsOnPlay}</span></div>`
+    ? `<div class="card-row"><span class="label">On build</span><span class="icon-badge">${iconImg(GameData.ICONS.coins, "Coins")} +${card.coinsOnPlay}</span></div>`
     : "";
 
   const costRow = actions.isFreeViaChain
-    ? `<div class="card-row"><span class="label">Cost</span><span class="icon-badge">⛓️ Free</span></div>`
+    ? `<div class="card-row"><span class="label">Cost</span><span class="icon-badge">${iconImg(GameData.ICONS.chain, "Chain")} Free</span></div>`
     : `<div class="card-row"><span class="label">Cost</span>${
         cost.length
-          ? cost.map((c) => `<span class="icon-badge">${c.icon} ${c.count}</span>`).join("")
+          ? cost.map((c) => `<span class="icon-badge">${costIcon(c.key)} ${c.count}</span>`).join("")
           : `<span class="icon-badge">Free</span>`
       }${!actions.canBuild ? '<span class="lock-badge" title="Cannot currently afford">🔒</span>' : ""}</div>`;
 
   const chainRow = card.chainTo.length
-    ? `<div class="card-chain">⛓️ Unlocks free: ${escapeHtml(formatChainList(card.chainTo))}</div>`
+    ? `<div class="card-chain">${iconImg(GameData.ICONS.chain, "Chain")} Unlocks free: ${escapeHtml(formatChainList(card.chainTo))}</div>`
     : card.chainFrom.length
-      ? `<div class="card-chain">⛓️ Free via: ${escapeHtml(formatChainList(card.chainFrom))}</div>`
+      ? `<div class="card-chain">${iconImg(GameData.ICONS.chain, "Chain")} Free via: ${escapeHtml(formatChainList(card.chainFrom))}</div>`
       : "";
 
   return `
@@ -172,7 +193,7 @@ function renderStatusBar(game) {
       <div class="status-chips">
         <span class="chip">Age <strong>${game.age}</strong></span>
         <span class="chip">Turn <strong>${game.turn}</strong> / 6</span>
-        <span class="chip">🪙 <strong>${me.coins}</strong></span>
+        <span class="chip">${iconImg(GameData.ICONS.coins, "Coins")} <strong>${me.coins}</strong></span>
         <span class="chip">${me.wonder.emoji} ${stageDots}</span>
         <button type="button" class="city-toggle" id="city-toggle">${state.showCity ? "▲" : "▼"} City</button>
       </div>
@@ -190,7 +211,7 @@ function renderRivalsStrip(game) {
       const shields = GameEngine.computeMilitaryStrength(game, idx);
       return `<div class="rival-chip${isNeighbor ? " neighbor" : ""}">
         <span class="rival-emoji">${p.wonder.emoji}</span>
-        <span>${tag ? `<span class="rival-tag">${tag}</span> ` : ""}${escapeHtml(p.name)} · 🪙${p.coins} · 🛡️${shields} · 🃏${p.built.length}</span>
+        <span>${tag ? `<span class="rival-tag">${tag}</span> ` : ""}${escapeHtml(p.name)} · ${iconImg(GameData.ICONS.coins, "Coins")}${p.coins} · ${iconImg(GameData.ICONS.shields, "Shields")}${shields} · 🃏${p.built.length}</span>
       </div>`;
     })
     .join("");
@@ -245,12 +266,12 @@ function renderActionBar(game, card) {
   const buildSub = actions.isFreeViaChain
     ? "Free (chain unlock)"
     : actions.canBuild
-      ? (actions.buildCoinsNeeded ? `Own + buy for ${actions.buildCoinsNeeded}🪙` : "From own production")
+      ? (actions.buildCoinsNeeded ? `Own + buy for ${actions.buildCoinsNeeded}${iconImg(GameData.ICONS.coins, "coins", "0.95em")}` : "From own production")
       : "Cannot afford";
   const wonderSub = game.players[0].wonderStagesBuilt >= game.players[0].wonder.stages.length
     ? "Wonder complete"
     : actions.canWonder
-      ? `Stage ${actions.wonderStageIndex + 1}${actions.wonderCoinsNeeded ? ` (+${actions.wonderCoinsNeeded}🪙 buy)` : ""}`
+      ? `Stage ${actions.wonderStageIndex + 1}${actions.wonderCoinsNeeded ? ` (+${actions.wonderCoinsNeeded}${iconImg(GameData.ICONS.coins, "coins", "0.95em")} buy)` : ""}`
       : "Cannot afford";
   return `
     <div class="action-bar" id="action-bar-slot">
@@ -284,7 +305,7 @@ function renderWonderCard(w, selected) {
     <button type="button" class="wonder-card${selected ? " selected" : ""}" data-wonder="${w.id}">
       <div class="wonder-emoji">${w.emoji}</div>
       <div class="wonder-name">${escapeHtml(w.name)}</div>
-      <div class="wonder-resource">Produces ${GameData.RESOURCES[w.resource].emoji} ${GameData.RESOURCES[w.resource].label}</div>
+      <div class="wonder-resource">Produces ${resIcon(w.resource)} ${GameData.RESOURCES[w.resource].label}</div>
     </button>
   `;
 }
@@ -476,16 +497,16 @@ function renderAgeEnd(app) {
       const tokens = m.tokensGained.length
         ? m.tokensGained.map((t) => `<span class="token-badge ${t > 0 ? "pos" : "neg"}">${t > 0 ? "+" : ""}${t}</span>`).join("")
         : `<span class="token-badge">—</span>`;
-      return `<div class="ageend-row${isSelf ? " self" : ""}"><span>${escapeHtml(m.name)} · 🛡️ ${m.strength}</span><div class="token-badges">${tokens}</div></div>`;
+      return `<div class="ageend-row${isSelf ? " self" : ""}"><span>${escapeHtml(m.name)} · ${iconImg(GameData.ICONS.shields, "Shields")} ${m.strength}</span><div class="token-badges">${tokens}</div></div>`;
     })
     .join("");
 
   app.innerHTML = `
     <div class="status-bar"><h1>🏛️ 7 Wonders</h1></div>
     <div class="ageend-panel">
-      <h2>⚔️ Age ${info.age} Military Results</h2>
+      <h2>${iconImg(GameData.ICONS.conflict, "Conflict", "1.3em")} Age ${info.age} Military Results</h2>
       ${rows}
-      <button type="button" id="ageend-continue" class="primary">${isFinal ? "🏆 See Final Score" : `▶️ Continue to Age ${info.age + 1}`}</button>
+      <button type="button" id="ageend-continue" class="primary">${isFinal ? `${iconImg(GameData.ICONS.vp, "Trophy", "1em")} See Final Score` : `▶️ Continue to Age ${info.age + 1}`}</button>
     </div>
   `;
   document.getElementById("ageend-continue").addEventListener("click", () => {
@@ -502,7 +523,7 @@ function renderGameEnd(app) {
   const rows = scores
     .map((s, rank) => `
       <tr class="${rank === 0 ? "winner" : ""}">
-        <td>${rank === 0 ? "🏆 " : ""}${escapeHtml(s.name)}</td>
+        <td>${rank === 0 ? iconImg(GameData.ICONS.vp, "Winner") + " " : ""}${escapeHtml(s.name)}</td>
         <td>${s.military}</td><td>${s.treasury}</td><td>${s.wonder}</td><td>${s.civilian}</td>
         <td>${s.scientific}</td><td>${s.commercial}</td><td>${s.guilds}</td>
         <td class="total-col">${s.total}</td>
@@ -517,7 +538,7 @@ function renderGameEnd(app) {
       <div class="winner-banner">${winner.playerIdx === 0 ? "🎉 You win!" : `${escapeHtml(winner.name)} wins!`}</div>
       <div class="score-scroll">
         <table class="score-table">
-          <thead><tr><th>Player</th><th>⚔️</th><th>🪙</th><th>🏛️</th><th>🏙️</th><th>🔬</th><th>💰</th><th>🤝</th><th>Total</th></tr></thead>
+          <thead><tr><th>Player</th><th>${iconImg(GameData.ICONS.shields, "Military")}</th><th>${iconImg(GameData.ICONS.coins, "Treasury")}</th><th>🏛️</th><th>🏙️</th><th>🔬</th><th>💰</th><th>🤝</th><th>Total</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>

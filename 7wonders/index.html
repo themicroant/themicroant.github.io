@@ -98,7 +98,12 @@ html, body {
 }
 .card {
   background: var(--bg-1);
-  border: 2px solid var(--border);
+  /* Base border is the card's own type color (set per-card via the --card-type-color custom
+     property, see script.js) — a colored frame the papyrus name-bar visually sits on top of.
+     Hover/focus/selected below override border-color directly, which — because they're normal
+     class/attribute selectors rather than another var() indirection — win the cascade over this
+     base rule regardless of the inline-set custom property. */
+  border: 2px solid var(--card-type-color, var(--border));
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
@@ -134,6 +139,14 @@ html, body {
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.15;
+  /* Consistent papyrus/parchment band regardless of card type — the type color lives on the
+     card's border (see .card above), and this ribbon sits "on top of" that frame. Matches the
+     ribbon banner styling in scripts/render_card.js for a consistent look between the live game
+     and the standalone card-image generator. */
+  background: linear-gradient(180deg, #f4ecd8, #e6d9b8);
+  color: #2b2416;
+  font-family: Georgia, 'Times New Roman', 'Palatino Linotype', serif;
+  letter-spacing: 0.02em;
 }
 .card-art {
   position: relative;
@@ -197,6 +210,18 @@ html, body {
   border-radius: 5px;
   padding: 2px 5px;
   font-size: 0.78rem;
+}
+/* Illustrated icons (resources, VP, coins, shields, chain, conflict — see GameData.ICONS /
+   RESOURCES[x].icon / SCIENCE_SYMBOLS[x].icon) drop into text flow at roughly cap-height, sized
+   by the --icon-size custom property so each call site can request a size without a bespoke
+   class; defaults to 1.15em so it reads a bit larger than the surrounding lowercase text. */
+.icon-img {
+  --icon-size: 1.15em;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  object-fit: contain;
+  vertical-align: -0.22em;
+  flex: 0 0 auto;
 }
 .lock-badge { margin-left: auto; font-size: 0.85rem; }
 .card-effect {

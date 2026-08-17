@@ -63,11 +63,15 @@ function hasPower(player, powerName) {
 // among the non-Guild Age III cards (docs/rules.md §Setup).
 function buildDeckPools(numPlayers) {
   const handTotal = 7 * numPlayers;
-  const age1 = shuffle(GD.CARDS.filter((c) => c.age === 1)).slice(0, handTotal).map((c) => c.id);
-  const age2 = shuffle(GD.CARDS.filter((c) => c.age === 2)).slice(0, handTotal).map((c) => c.id);
 
-  const age3NonGuild = shuffle(GD.CARDS.filter((c) => c.age === 3 && c.type !== "guild"));
-  const guildsToKeep = shuffle(GD.CARDS.filter((c) => c.age === 3 && c.type === "guild")).slice(0, numPlayers + 2);
+  // Filter cards by minimum player count: only include cards where playerCount <= numPlayers
+  const isCardValid = (c) => c.playerCount <= numPlayers;
+
+  const age1 = shuffle(GD.CARDS.filter((c) => c.age === 1 && isCardValid(c))).slice(0, handTotal).map((c) => c.id);
+  const age2 = shuffle(GD.CARDS.filter((c) => c.age === 2 && isCardValid(c))).slice(0, handTotal).map((c) => c.id);
+
+  const age3NonGuild = shuffle(GD.CARDS.filter((c) => c.age === 3 && c.type !== "guild" && isCardValid(c)));
+  const guildsToKeep = shuffle(GD.CARDS.filter((c) => c.age === 3 && c.type === "guild" && isCardValid(c))).slice(0, numPlayers + 2);
   const age3NeedNonGuild = handTotal - guildsToKeep.length;
   const age3 = shuffle([...age3NonGuild.slice(0, age3NeedNonGuild), ...guildsToKeep]).map((c) => c.id);
 
@@ -102,7 +106,7 @@ function createGame(numPlayers, options = {}) {
       discardPileBuildUsedThisAge: false,
       // Trading-post-style discount cards apply "starting on the turn following" construction
       // (docs/rules.md), tracked as the first game.globalTurn the discount is active from.
-      tradeDiscountReadyTurn: { raw: null, manufactured: null },
+      tradeDiscountReadyTurn: { basic: null, manufactured: null },
     });
   }
 
@@ -202,7 +206,7 @@ function solveCost(production, cost) {
 
 function tradeUnitCost(game, playerIdx, resource) {
   const p = game.players[playerIdx];
-  const category = MANUFACTURED_RESOURCES.includes(resource) ? "manufactured" : "raw";
+  const category = MANUFACTURED_RESOURCES.includes(resource) ? "manufactured" : "basic";
   const readyTurn = p.tradeDiscountReadyTurn[category];
   return readyTurn != null && game.globalTurn >= readyTurn ? 1 : 2;
 }
@@ -669,7 +673,7 @@ const GameEngine = {
   computeMilitaryStrength, resolveMilitary,
   playHumanTurn, advanceAfterHuman, finishTurn,
   hasPower, neighborsOf,
-  computeFinalScores, computeScienceScore, computeGuildScore,
+  computeFinalScores, computeScienceScore, computeGuildScore, guildScoreForRule,
 };
 
 if (typeof module !== "undefined" && module.exports) module.exports = GameEngine;

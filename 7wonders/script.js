@@ -74,16 +74,84 @@ function cardArtUrl(card) {
   return pool[hash % pool.length];
 }
 
+// Get the image path for a card. Cards with CARD_IMAGES entries use those; otherwise fall back
+// to the shared CARD_ART pool hashed by card id.
+function cardImagePath(card) {
+  const img = GameData.CARD_IMAGES[card.id];
+  return img ? img : cardArtUrl(card);
+}
+
+// A card's face art: use the individual card image if it exists, otherwise the shared CARD_ART pool.
+function cardArtStyle(card) {
+  const imagePath = cardImagePath(card);
+  return `background-image:url('${imagePath}');`;
+}
+
+// A standalone illustration from GameData.SCENES.
+function sceneThumb(sceneKey, label) {
+  const imagePath = GameData.SCENES[sceneKey];
+  return imagePath ? `<span class="scene-thumb" role="img" aria-label="${escapeHtml(label)}" style="background-image:url('${imagePath}');"></span>` : "";
+}
+
 // The single most important stat to surface as a glanceable badge on a grid tile, by card type
 // — everything else (full cost breakdown, effect text, chain info) lives in the selected-card
 // detail panel instead, not on every tile at once.
+// Note: all cards show their primary stat only in the header band (repeated icons for multiple production, etc).
 function primaryValueBadge(card) {
-  if ((card.type === "civilian" || card.type === "guild") && card.vp) return `${iconImg(GameData.ICONS.vp, "VP")} ${card.vp}`;
-  if (card.type === "commercial" && card.coinsOnPlay) return `${iconImg(GameData.ICONS.coins, "Coins")}+${card.coinsOnPlay}`;
   if (card.type === "scientific" && card.science) return sciIcon(card.science);
-  if (card.type === "military" && card.shields) return `${iconImg(GameData.ICONS.shields, "Shields")}${card.shields}`;
-  if ((card.type === "raw" || card.type === "manufactured") && card.produceCount > 1) return `×${card.produceCount}`;
   return null;
+}
+
+// Card band shown for all card types — colored bar at top with the primary stat/resource
+function cardBandHtml(card, game, playerIdx) {
+  let content = "";
+
+  if (card.type === "basic" || card.type === "manufactured") {
+    // Production icons for resource cards — show icon repeated for produceCount
+    if (card.produces && card.produces.length) {
+      const icons = card.produces.map((r) => {
+        const icon = resIcon(r);
+        const count = card.produceCount || 1;
+        return Array(count).fill(`<span class="band-icon"><span>${icon}</span></span>`).join("");
+      }).join(card.producesChoice ? '<span class="band-separator">•</span>' : "");
+      content = icons;
+    }
+  } else if (card.type === "civilian") {
+    // VP for civilian cards
+    if (card.vp) {
+      content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.vp, "VP")}</span> ${card.vp}</span>`;
+    }
+  } else if (card.type === "guild") {
+    // Guild cards show calculated VP value based on game state
+    if (game && playerIdx !== undefined && card.guildRule) {
+      const vp = GameEngine.guildScoreForRule(game, playerIdx, card.guildRule);
+      content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.vp, "VP")}</span> ${vp}</span>`;
+    } else {
+      // Fallback if game state not available
+      content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.vp, "VP")}</span> —</span>`;
+    }
+  } else if (card.type === "scientific") {
+    // Science symbol for scientific cards
+    if (card.science) {
+      content = `<span class="band-icon"><span>${sciIcon(card.science)}</span></span>`;
+    }
+  } else if (card.type === "commercial") {
+    // Coins for commercial cards
+    if (card.coinsOnPlay) {
+      content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.coins, "Coins")}</span> +${card.coinsOnPlay}</span>`;
+    } else {
+      // Passive commercial card - show a subtle indicator
+      content = `<span class="band-icon" style="opacity: 0.6;">🏪</span>`;
+    }
+  } else if (card.type === "military") {
+    // Shields for military cards — show one icon per shield
+    if (card.shields) {
+      const shieldIcons = Array(card.shields).fill(iconImg(GameData.ICONS.shields, "Shield")).join("");
+      content = `<span class="band-icon">${shieldIcons}</span>`;
+    }
+  }
+
+  return `<div class="card-band">${content}</div>`;
 }
 
 // ---- card rendering (hand screen) ----
@@ -98,7 +166,7 @@ function renderCard(game, card, isSelected, isTabbable) {
     ? `${iconImg(GameData.ICONS.chain, "Chain")} Free`
     : cost.length
       ? cost.map((c) => `${costIcon(c.key)}${c.count > 1 ? c.count : ""}`).join(" ")
-      : "Free";
+      : "";
 
   return `
     <button
@@ -111,10 +179,11 @@ function renderCard(game, card, isSelected, isTabbable) {
       style="--card-type-color: ${type.color};"
     >
       <div class="card-name-bar">${escapeHtml(card.name)}</div>
-      <div class="card-art" style="background-image: url('${cardArtUrl(card)}');">
-        <div class="card-emoji-badge">${card.emoji}</div>
+      ${cardBandHtml(card, game, 0)}
+      <div class="card-art" style="${cardArtStyle(card)}">
+        ${!GameData.CARD_IMAGES[card.id] ? `<div class="card-emoji-badge">${card.emoji}</div>` : ""}
         ${!actions.canBuild ? '<div class="card-lock-badge" title="Cannot currently afford">🔒</div>' : ""}
-        <div class="card-cost-pill">${costLabel}</div>
+        ${costLabel ? `<div class="card-cost-pill">${costLabel}</div>` : ""}
         ${value ? `<div class="card-value-badge">${value}</div>` : ""}
       </div>
     </button>
@@ -192,7 +261,6 @@ function renderStatusBar(game) {
       <h1>🏛️ 7 Wonders</h1>
       <div class="status-chips">
         <span class="chip">Age <strong>${game.age}</strong></span>
-        <span class="chip">Turn <strong>${game.turn}</strong> / 6</span>
         <span class="chip">${iconImg(GameData.ICONS.coins, "Coins")} <strong>${me.coins}</strong></span>
         <span class="chip">${me.wonder.emoji} ${stageDots}</span>
         <button type="button" class="city-toggle" id="city-toggle">${state.showCity ? "▲" : "▼"} City</button>
@@ -209,13 +277,52 @@ function renderRivalsStrip(game) {
       const isNeighbor = idx === left || idx === right;
       const tag = idx === left ? "Left" : idx === right ? "Right" : "";
       const shields = GameEngine.computeMilitaryStrength(game, idx);
-      return `<div class="rival-chip${isNeighbor ? " neighbor" : ""}">
+      return `<button type="button" class="rival-chip${isNeighbor ? " neighbor" : ""}" data-rival-id="${idx}" title="Click to view their city">
         <span class="rival-emoji">${p.wonder.emoji}</span>
         <span>${tag ? `<span class="rival-tag">${tag}</span> ` : ""}${escapeHtml(p.name)} · ${iconImg(GameData.ICONS.coins, "Coins")}${p.coins} · ${iconImg(GameData.ICONS.shields, "Shields")}${shields} · 🃏${p.built.length}</span>
-      </div>`;
+      </button>`;
     })
     .join("");
   return `<div class="rivals-strip">${chips}</div>`;
+}
+
+function renderRivalCityModal(game, rivalIdx) {
+  const rival = game.players[rivalIdx];
+  const cards = rival.built.map((id) => {
+    const c = GameEngine.CARD_BY_ID[id];
+    const type = GameData.CARD_TYPES[c.type];
+    return `<span class="city-chip" style="border-left: 3px solid ${type.color}">${c.emoji} ${escapeHtml(c.name)}</span>`;
+  }).join("");
+
+  // Get rival's resource production
+  const prod = GameEngine.computeProduction(game, rivalIdx);
+  const fixedResources = Object.entries(prod.fixed)
+    .map(([res, count]) => `<span class="icon-badge">${resIcon(res)}×${count}</span>`)
+    .join("");
+  const choiceResources = prod.choices.length > 0
+    ? prod.choices.map(opts => `<span class="icon-badge" title="Choose one">${opts.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
+    : "";
+  const resourceDisplay = fixedResources || choiceResources
+    ? `<div class="card-row"><span class="label">Resources:</span>${fixedResources}${choiceResources}</div>`
+    : "";
+
+  return `
+    <div class="modal-overlay" id="rival-modal">
+      <div class="modal-panel">
+        <h3>${rival.wonder.emoji} ${escapeHtml(rival.name)}'s City</h3>
+        <div class="card-row">
+          <span class="label">Wonder:</span> ${rival.wonder.name} (Stage ${rival.wonderStagesBuilt}/${rival.wonder.stages.length})
+        </div>
+        <div class="card-row">
+          <span class="label">Treasury:</span> ${iconImg(GameData.ICONS.coins, "Coins")}${rival.coins} · ${iconImg(GameData.ICONS.shields, "Shields")}${GameEngine.computeMilitaryStrength(game, rivalIdx)}
+        </div>
+        ${resourceDisplay}
+        <h4 style="margin-top: 12px;">Built Structures (${rival.built.length})</h4>
+        <div class="city-chips">${cards || "<span class='city-chip'>No structures built yet</span>"}</div>
+        <button type="button" class="primary" id="close-rival-modal" style="margin-top: 12px; width: 100%;">Close</button>
+      </div>
+    </div>
+  `;
 }
 
 function renderCityPanel(game) {
@@ -223,10 +330,41 @@ function renderCityPanel(game) {
   const chips = me.built.length
     ? me.built.map((id) => { const c = GameEngine.CARD_BY_ID[id]; return `<span class="city-chip">${c.emoji} ${escapeHtml(c.name)}</span>`; }).join("")
     : `<span class="city-chip">Nothing built yet</span>`;
+
+  // Show current resources
+  const prod = GameEngine.computeProduction(game, 0);
+  const fixedResources = Object.entries(prod.fixed)
+    .map(([res, count]) => `<span class="icon-badge">${resIcon(res)}${count}</span>`)
+    .join("");
+  const choiceResources = prod.choices.length > 0
+    ? prod.choices.map(opts => `<span class="icon-badge" title="Choose one">${opts.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
+    : "";
+  const resourceDisplay = fixedResources || choiceResources
+    ? `<div class="card-row"><span class="label">Resources</span>${fixedResources}${choiceResources}</div>`
+    : "";
+
+  // Show next wonder stage cost if available
+  const nextStageIndex = me.wonderStagesBuilt;
+  const nextStage = nextStageIndex < me.wonder.stages.length ? me.wonder.stages[nextStageIndex] : null;
+  const nextStageCost = nextStage
+    ? Object.entries(nextStage.cost).map(([res, count]) => `${costIcon(res)}${count > 1 ? count : ""}`).join(" ")
+    : "Complete";
+
   return `
     <div class="city-panel">
-      <h3>🏙️ Your City — ${me.built.length} structures, ${me.wonder.name} stage ${me.wonderStagesBuilt}/${me.wonder.stages.length}</h3>
+      <div class="panel-head">
+        ${sceneThumb("wonderBuild", `${me.wonder.name} under construction`)}
+        <h3>🏙️ Your City — ${me.built.length} structures</h3>
+      </div>
+      ${resourceDisplay}
       <div class="city-chips">${chips}</div>
+      <div class="card-row">
+        <span class="label">${me.wonder.name}</span>
+        <span class="wonder-progress">
+          ${me.wonder.stages.map((_, i) => `<span class="wonder-stage-dot${i < me.wonderStagesBuilt ? " built" : ""}" title="Stage ${i + 1}"></span>`).join("")}
+        </span>
+      </div>
+      ${nextStage ? `<div class="card-row"><span class="label">Next stage needs</span>${nextStageCost}</div>` : ""}
     </div>
   `;
 }
@@ -253,7 +391,10 @@ function renderDiscardModal(game) {
   return `
     <div class="modal-overlay" id="discard-modal-overlay">
       <div class="modal-panel">
-        <h3>🗑️ Reclaim a card, built for free</h3>
+        <div class="panel-head">
+          ${sceneThumb("discardPile", "The discard pile")}
+          <h3>🗑️ Reclaim a card, built for free</h3>
+        </div>
         <div class="discard-pile-grid">${cards}</div>
         <button type="button" id="discard-modal-close" style="margin-top:10px;">Cancel</button>
       </div>
@@ -301,12 +442,62 @@ function renderActionBarSlot(game) {
 // ---- screens ----
 
 function renderWonderCard(w, selected) {
+  const wonderImage = GameData.WONDER_IMAGES[w.id];
   return `
-    <button type="button" class="wonder-card${selected ? " selected" : ""}" data-wonder="${w.id}">
-      <div class="wonder-emoji">${w.emoji}</div>
+    <button type="button" class="wonder-card${selected ? " selected" : ""}" data-wonder="${w.id}" title="Click to view stages">
+      ${wonderImage
+        ? `<span class="wonder-art" role="img" aria-label="${escapeHtml(w.name)}" style="background-image:url('${wonderImage}');"></span>`
+        : `<div class="wonder-emoji">${w.emoji}</div>`}
       <div class="wonder-name">${escapeHtml(w.name)}</div>
       <div class="wonder-resource">Produces ${resIcon(w.resource)} ${GameData.RESOURCES[w.resource].label}</div>
     </button>
+  `;
+}
+
+function renderWonderDetailModal(wonderId) {
+  const wonder = GameData.WONDERS.find(w => w.id === wonderId);
+  if (!wonder) return "";
+
+  const stagesHtml = wonder.stages.map((stage, idx) => {
+    const costHtml = Object.entries(stage.cost)
+      .map(([res, count]) => `<span class="icon-badge">${costIcon(res)}${count > 1 ? count : ""}</span>`)
+      .join("");
+    const effectHtml = Object.entries(stage.effect)
+      .filter(([key, val]) => val > 0)
+      .map(([key, val]) => {
+        if (key === "vp") return `${val} VP`;
+        if (key === "coins") return `${iconImg(GameData.ICONS.coins, "Coins")} +${val}`;
+        if (key === "shields") return `${val} ${iconImg(GameData.ICONS.shields, "Shields")}`;
+        if (key === "power") return `Special power: ${val}`;
+        return `${key}: ${val}`;
+      })
+      .join(" • ");
+
+    return `
+      <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+        <div style="font-weight: 700; margin-bottom: 6px;">Stage ${idx + 1}</div>
+        <div class="card-row" style="margin-bottom: 6px;">
+          <span class="label">Cost:</span> ${costHtml || '<span class="label">Free</span>'}
+        </div>
+        <div class="card-row">
+          <span class="label">Effect:</span> ${effectHtml}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="modal-overlay" id="wonder-detail-modal">
+      <div class="modal-panel">
+        <h3>${wonder.emoji} ${escapeHtml(wonder.name)}</h3>
+        <div class="card-row" style="margin-bottom: 12px;">
+          <span class="label">Starting Resource:</span> ${resIcon(wonder.resource)} ${GameData.RESOURCES[wonder.resource].label}
+        </div>
+        <h4 style="margin-bottom: 8px;">Construction Stages</h4>
+        ${stagesHtml}
+        <button type="button" class="primary" id="close-wonder-modal" style="margin-top: 12px; width: 100%;">Close</button>
+      </div>
+    </div>
   `;
 }
 
@@ -314,9 +505,10 @@ function renderSetup(app) {
   app.innerHTML = `
     <div class="status-bar"><h1>🏛️ 7 Wonders</h1></div>
     <div class="setup-panel">
+      <div class="setup-hero" role="img" aria-label="An ancient harbour city at golden hour" style="background-image:url('${GameData.SCENES.title}');"></div>
       <h2>Players</h2>
       <div class="count-row" id="count-row">
-        ${GameData.SUPPORTED_PLAYER_COUNTS.map((n) => `<button type="button" class="count-btn${state.setup.numPlayers === n ? " selected" : ""}" data-count="${n}">${n} Players</button>`).join("")}
+        ${GameData.SUPPORTED_PLAYER_COUNTS.map((n) => `<button type="button" class="count-btn${state.setup.numPlayers === n ? " selected" : ""}" data-count="${n}">${n}</button>`).join("")}
       </div>
       <h2>Choose your Wonder</h2>
       <div class="wonder-grid" id="wonder-grid">
@@ -333,7 +525,20 @@ function renderSetup(app) {
     });
   });
   document.getElementById("wonder-grid").querySelectorAll(".wonder-card").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      // Show detail modal
+      const app = document.getElementById("app");
+      const detailHtml = renderWonderDetailModal(btn.dataset.wonder);
+      const detailEl = new DOMParser().parseFromString(detailHtml, "text/html").body.firstChild;
+      app.appendChild(detailEl);
+
+      // Setup select and close handlers
+      document.getElementById("close-wonder-modal").addEventListener("click", () => {
+        detailEl.remove();
+      });
+
+      // Also select when detail opens (optional - can remove if you prefer to select separately)
       state.setup.wonderId = btn.dataset.wonder;
       render();
     });
@@ -363,7 +568,7 @@ function renderHand(app, opts = {}) {
     ${renderRivalsStrip(game)}
     ${state.showCity ? renderCityPanel(game) : ""}
     ${renderPowerRow(game)}
-    <div class="hand-prompt">${state.freeBuildArmed ? "✨ Tap a card to build it for free." : "Choose <strong>1 card</strong> to play this turn."}</div>
+    ${state.freeBuildArmed ? '<div class="hand-prompt">✨ Tap a card to build it for free.</div>' : ""}
     <div class="hand" role="listbox" aria-label="Your hand" id="hand">
       ${me.hand.map((id) => renderCard(game, GameEngine.CARD_BY_ID[id], id === state.selectedCardId, id === tabbableId)).join("")}
     </div>
@@ -411,6 +616,15 @@ function renderHand(app, opts = {}) {
   document.getElementById("city-toggle").addEventListener("click", () => {
     state.showCity = !state.showCity;
     render();
+  });
+  document.querySelectorAll(".rival-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const rivalIdx = parseInt(chip.dataset.rivalId, 10);
+      app.appendChild(new DOMParser().parseFromString(renderRivalCityModal(game, rivalIdx), "text/html").body.firstChild);
+      document.getElementById("close-rival-modal").addEventListener("click", () => {
+        document.getElementById("rival-modal").remove();
+      });
+    });
   });
   document.getElementById("power-freebuild")?.addEventListener("click", () => {
     state.freeBuildArmed = !state.freeBuildArmed;
@@ -504,7 +718,10 @@ function renderAgeEnd(app) {
   app.innerHTML = `
     <div class="status-bar"><h1>🏛️ 7 Wonders</h1></div>
     <div class="ageend-panel">
-      <h2>${iconImg(GameData.ICONS.conflict, "Conflict", "1.3em")} Age ${info.age} Military Results</h2>
+      <div class="panel-head">
+        ${sceneThumb("battlefield", "Battlefield at dusk")}
+        <h2>${iconImg(GameData.ICONS.conflict, "Conflict", "1.3em")} Age ${info.age} Military Results</h2>
+      </div>
       ${rows}
       <button type="button" id="ageend-continue" class="primary">${isFinal ? `${iconImg(GameData.ICONS.vp, "Trophy", "1em")} See Final Score` : `▶️ Continue to Age ${info.age + 1}`}</button>
     </div>
@@ -534,7 +751,10 @@ function renderGameEnd(app) {
   app.innerHTML = `
     <div class="status-bar"><h1>🏛️ 7 Wonders</h1></div>
     <div class="gameend-panel">
-      <h2>🏁 Final Results</h2>
+      <div class="panel-head">
+        ${sceneThumb("finalTriumph", "The completed city")}
+        <h2>🏁 Final Results</h2>
+      </div>
       <div class="winner-banner">${winner.playerIdx === 0 ? "🎉 You win!" : `${escapeHtml(winner.name)} wins!`}</div>
       <div class="score-scroll">
         <table class="score-table">

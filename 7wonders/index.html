@@ -98,12 +98,9 @@ html, body {
 }
 .card {
   background: var(--bg-1);
-  /* Base border is the card's own type color (set per-card via the --card-type-color custom
-     property, see script.js) — a colored frame the papyrus name-bar visually sits on top of.
-     Hover/focus/selected below override border-color directly, which — because they're normal
-     class/attribute selectors rather than another var() indirection — win the cascade over this
-     base rule regardless of the inline-set custom property. */
-  border: 2px solid var(--card-type-color, var(--border));
+  /* Consistent border for all cards regardless of type — the type color is shown in the
+     production band instead. Hover/focus/selected below override border-color with accent. */
+  border: 2px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
@@ -148,6 +145,50 @@ html, body {
   font-family: Georgia, 'Times New Roman', 'Palatino Linotype', serif;
   letter-spacing: 0.02em;
 }
+.card-band {
+  background: var(--card-type-color, var(--border));
+  padding: 6px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+  min-height: 44px;
+}
+.band-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+.band-icon > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+.band-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+.band-separator {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+  margin: 0 1px;
+}
 .card-art {
   position: relative;
   aspect-ratio: 0.82;
@@ -155,6 +196,23 @@ html, body {
   background-position: center;
   border-top: 1px solid var(--border);
 }
+/* Cards whose art is a spritesheet cell get background-image/size/position set inline by
+   script.js's cardArtStyle(); the cover/center above only applies to the CARD_ART pool fallback.
+   Sprite cells are cut to this same 0.82 ratio (see scripts/build_spritesheet.py) so a cell fills
+   the panel exactly, with no letterboxing and no distortion. */
+.scene-thumb {
+  flex: 0 0 auto;
+  width: 46px;
+  aspect-ratio: 0.82;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+/* A panel heading with a scene illustration alongside it. */
+.panel-head { display: flex; align-items: center; gap: 10px; }
+.panel-head h2, .panel-head h3 { margin: 0; }
 .card-emoji-badge {
   position: absolute; top: 6px; right: 6px;
   width: 28px; height: 28px; border-radius: 50%;
@@ -255,7 +313,10 @@ html, body {
   font-size: 0.78rem;
   color: var(--text-dim);
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
+.rival-chip:hover { border-color: var(--accent); background: var(--bg-2); }
 .rival-chip.neighbor { border-color: var(--accent); color: var(--text); }
 .rival-chip .rival-emoji { font-size: 1.3rem; }
 .rival-chip .rival-tag { font-size: 0.6rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -391,6 +452,31 @@ html, body {
 .wonder-card:hover { border-color: var(--accent); }
 .wonder-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .wonder-card .wonder-emoji { font-size: 2rem; }
+/* Wonder-board art. The wonders sheet is cut to 4:3 landscape rather than the card sheets' 0.82
+   portrait, because this is a banner strip across a short, wide tile — see GameData.SPRITE_SHEETS. */
+.wonder-card .wonder-art {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+/* Title art on the setup screen. Compact to leave room for content below. */
+.setup-hero {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  height: 140px;
+  margin: 0 auto 12px;
+  aspect-ratio: 2 / 1;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
 .wonder-card .wonder-name { font-size: 0.85rem; font-weight: 700; }
 .wonder-card .wonder-resource { font-size: 0.7rem; color: var(--text-dim); }
 
@@ -449,6 +535,9 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 
 /* Below ~330px the 3-up grid can't fit at a legible width, so it falls back to 2 columns
    (auto-fit does this automatically) — take advantage of the extra room per card. */
+@media (max-width: 480px) {
+  .setup-hero { max-width: 240px; }
+}
 @media (max-width: 330px) {
   .card-emoji { font-size: 2.2rem; }
   .card-name { font-size: 0.95rem; }

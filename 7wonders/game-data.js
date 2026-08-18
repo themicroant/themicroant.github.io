@@ -194,77 +194,188 @@ const GameData = {
   },
 
   // Base game only — the Leaders expansion and the 2-player "Free City" variant (see
-  // docs/rules.md) are not implemented. Content below supports 3-7 players; the same fixed
-  // pool is reused regardless of player count (a documented simplification — the physical game
-  // varies deck composition by player count, e.g. more copies of basic resource cards at higher
-  // counts; this implementation does not). Each card has a `playerCount` field listing which
-  // player counts it's valid for; cards can appear at multiple player counts or be exclusive to
-  // certain counts.
-  SUPPORTED_PLAYER_COUNTS: [3, 4, 5, 6, 7],
+  // docs/rules.md) are not implemented. Each card carries a `playerCount`: the smallest table it
+  // appears at, so `playerCount <= numPlayers` selects the deck. The same fixed pool is reused
+  // regardless of player count (a documented simplification — the physical game varies deck
+  // composition by player count, e.g. more copies of basic resource cards at higher counts;
+  // this implementation does not).
+  //
+  // 3-4 seats only: an Age deals 7 cards per player, and the pool holds 28 cards per Age (26 of
+  // them valid at 3 players), which covers 4 seats and no more. The physical game reaches 7
+  // players by adding extra copies of cards; until those copies are authored, higher counts
+  // would deal short or empty hands, so they aren't offered — `buildDeckPools` throws rather
+  // than dealing a short pool.
+  SUPPORTED_PLAYER_COUNTS: [3, 4],
 
-  // Seven Wonder boards. Each has a starting resource (produced for free from turn 1) and 3
-  // stages, each with a resource cost and an effect. `effect.power` names one of 4 special
-  // abilities (see docs/rules.md "Wonder board powers"); the rules summary sheet doesn't tie
-  // these to specific named boards, so this assignment (one board per power) is this
-  // implementation's own placeholder choice, not verified against the physical boards. Stage
-  // costs/effects are a reasonable original design sized for this card pool's economy, not
-  // transcribed from the physical game — see the content-status note on CARDS below.
+  // Human-readable text for each `effect.power` a Wonder stage can grant (keys match the
+  // `power` strings used in WONDERS below). Kept as data so the UI never hard-codes rule text.
+  WONDER_POWERS: {
+    produceRawChoice:          "Each turn, produce 1 raw material of your choice (Stone/Clay/Wood/Ore). Neighbours cannot buy it.",
+    produceManufacturedChoice: "Each turn, produce 1 manufactured good of your choice (Glass/Loom/Papyrus). Neighbours cannot buy it.",
+    extraScienceSymbol:        "At the end of the game, gain an extra scientific symbol of your choice.",
+    freeBuildPerAge:           "Once per Age, construct a structure from your hand for free.",
+    discardPileBuild:          "Look through every card discarded since the start of the game, pick one, and build it for free.",
+    lastCardAlternative:       "Play the 7th card of each Age instead of discarding it (build it, discard it for 3 coins, or use it on your Wonder).",
+    cheapRawTrade:             "Buy raw materials from both neighbouring cities for 1 coin instead of 2.",
+    copyNeighborGuild:         "At the end of the game, copy one Guild (purple card) built by either neighbouring city.",
+  },
+
+  // The seven Wonder boards, transcribed from the board scans and rule text in
+  // docs/wonders_boards/*.png. Each board has a starting `resource` (produced free from turn 1,
+  // and purchasable by neighbours like any other production) and two playable faces:
+  // `sides.A` (the simple face) and `sides.B` (the advanced face). Every side is a list of
+  // stages built strictly left-to-right, each `{ cost, effect }`; `effect` may carry any of
+  // `vp` / `coins` / `shields` / `power` (see WONDER_POWERS above). Gizah's B face is the one
+  // board with 4 stages — nothing may assume a fixed stage count.
+  //
+  // Unlike CARDS below, this data *is* transcribed from the physical boards, not placeholder.
   WONDERS: [
     {
       id: "gizah", name: "Gizah", emoji: "🔺", resource: "stone",
-      stages: [
-        { cost: { wood: 2 }, effect: { vp: 3 } },
-        { cost: { stone: 2 }, effect: { vp: 5 } },
-        { cost: { clay: 2, ore: 1 }, effect: { vp: 7 } },
-      ],
+      sides: {
+        A: {
+          summary: "No special ability — the three stages are worth 3, 5 and 7 victory points.",
+          stages: [
+            { cost: { stone: 2 }, effect: { vp: 3 } },
+            { cost: { wood: 3 }, effect: { vp: 5 } },
+            { cost: { stone: 4 }, effect: { vp: 7 } },
+          ],
+        },
+        B: {
+          summary: "Built in 4 stages worth 3, 5, 5 and 7 victory points — 20 points in total.",
+          stages: [
+            { cost: { wood: 2 }, effect: { vp: 3 } },
+            { cost: { stone: 3 }, effect: { vp: 5 } },
+            { cost: { clay: 3 }, effect: { vp: 5 } },
+            { cost: { stone: 4, papyrus: 1 }, effect: { vp: 7 } },
+          ],
+        },
+      },
     },
     {
       id: "rhodos", name: "Rhodos", emoji: "🗿", resource: "ore",
-      stages: [
-        { cost: { wood: 2 }, effect: { coins: 3, shields: 1 } },
-        { cost: { clay: 2 }, effect: { shields: 1, vp: 3 } },
-        { cost: { ore: 3 }, effect: { vp: 7 } },
-      ],
+      sides: {
+        A: {
+          summary: "The second stage adds 2 Shields to your strength in every conflict resolution.",
+          stages: [
+            { cost: { wood: 2 }, effect: { vp: 3 } },
+            { cost: { clay: 3 }, effect: { shields: 2 } },
+            { cost: { ore: 4 }, effect: { vp: 7 } },
+          ],
+        },
+        B: {
+          summary: "The Colossus is built in only 2 stages, each worth 1 Shield, coins and victory points.",
+          stages: [
+            { cost: { stone: 3 }, effect: { shields: 1, coins: 3, vp: 3 } },
+            { cost: { ore: 4 }, effect: { shields: 1, coins: 4, vp: 4 } },
+          ],
+        },
+      },
     },
     {
       id: "ephesos", name: "Ephesos", emoji: "🛕", resource: "papyrus",
-      stages: [
-        { cost: { stone: 2 }, effect: { coins: 4 } },
-        { cost: { wood: 2 }, effect: { coins: 4, vp: 2 } },
-        { cost: { papyrus: 2 }, effect: { vp: 7 } },
-      ],
+      sides: {
+        A: {
+          summary: "The second stage pays 9 coins from the bank, once, as soon as it is built.",
+          stages: [
+            { cost: { stone: 2 }, effect: { vp: 3 } },
+            { cost: { wood: 2 }, effect: { coins: 9 } },
+            { cost: { papyrus: 2 }, effect: { vp: 7 } },
+          ],
+        },
+        B: {
+          summary: "Every stage pays 4 coins from the bank, once, as soon as it is built.",
+          stages: [
+            { cost: { stone: 2 }, effect: { vp: 2, coins: 4 } },
+            { cost: { wood: 2 }, effect: { vp: 3, coins: 4 } },
+            { cost: { papyrus: 1, loom: 1, glass: 1 }, effect: { vp: 5, coins: 4 } },
+          ],
+        },
+      },
     },
     {
       id: "babylon", name: "Babylon", emoji: "🌳", resource: "clay",
-      stages: [
-        { cost: { clay: 2 }, effect: { vp: 3 } },
-        { cost: { wood: 2 }, effect: { vp: 4 } },
-        { cost: { ore: 2, papyrus: 1 }, effect: { vp: 4, power: "copyNeighborGuild" } },
-      ],
+      sides: {
+        A: {
+          summary: "The second stage grants an extra scientific symbol, chosen at the end of the game.",
+          stages: [
+            { cost: { clay: 2 }, effect: { vp: 3 } },
+            { cost: { wood: 3 }, effect: { power: "extraScienceSymbol" } },
+            { cost: { clay: 4 }, effect: { vp: 7 } },
+          ],
+        },
+        B: {
+          summary: "The second stage lets you play the 7th card of each Age; the third grants a scientific symbol of your choice.",
+          stages: [
+            { cost: { loom: 1, clay: 1 }, effect: { vp: 3 } },
+            { cost: { glass: 1, wood: 2 }, effect: { power: "lastCardAlternative" } },
+            { cost: { clay: 4, papyrus: 1 }, effect: { power: "extraScienceSymbol" } },
+          ],
+        },
+      },
     },
     {
       id: "olympia", name: "Olympia", emoji: "🏟️", resource: "wood",
-      stages: [
-        { cost: { wood: 2 }, effect: { vp: 3 } },
-        { cost: { stone: 2 }, effect: { vp: 2, power: "freeBuildPerAge" } },
-        { cost: { ore: 2, loom: 1 }, effect: { vp: 7 } },
-      ],
+      sides: {
+        A: {
+          summary: "The second stage lets you build one structure for free, once per Age.",
+          stages: [
+            { cost: { wood: 2 }, effect: { vp: 3 } },
+            { cost: { stone: 2 }, effect: { power: "freeBuildPerAge" } },
+            { cost: { ore: 2 }, effect: { vp: 7 } },
+          ],
+        },
+        B: {
+          summary: "Cheap raw materials from both neighbours, then 5 VP, then a copy of a neighbouring Guild.",
+          stages: [
+            { cost: { wood: 2 }, effect: { power: "cheapRawTrade" } },
+            { cost: { stone: 2 }, effect: { vp: 5 } },
+            { cost: { loom: 1, ore: 2 }, effect: { power: "copyNeighborGuild" } },
+          ],
+        },
+      },
     },
     {
       id: "halikarnassos", name: "Halikarnassos", emoji: "⚰️", resource: "loom",
-      stages: [
-        { cost: { clay: 2 }, effect: { coins: 4 } },
-        { cost: { ore: 2 }, effect: { vp: 2, power: "discardPileBuild" } },
-        { cost: { stone: 2, glass: 1 }, effect: { vp: 7 } },
-      ],
+      sides: {
+        A: {
+          summary: "The second stage lets you build one card from the discard pile for free.",
+          stages: [
+            { cost: { clay: 2 }, effect: { vp: 3 } },
+            { cost: { ore: 3 }, effect: { power: "discardPileBuild" } },
+            { cost: { loom: 2 }, effect: { vp: 7 } },
+          ],
+        },
+        B: {
+          summary: "Every stage lets you build another card from the discard pile for free.",
+          stages: [
+            { cost: { ore: 2 }, effect: { vp: 2, power: "discardPileBuild" } },
+            { cost: { clay: 3 }, effect: { vp: 1, power: "discardPileBuild" } },
+            { cost: { glass: 1, papyrus: 1, loom: 1 }, effect: { power: "discardPileBuild" } },
+          ],
+        },
+      },
     },
     {
       id: "alexandria", name: "Alexandria", emoji: "🗼", resource: "glass",
-      stages: [
-        { cost: { stone: 2 }, effect: { vp: 3 } },
-        { cost: { ore: 2 }, effect: { vp: 2, power: "lastCardAlternative" } },
-        { cost: { wood: 2, papyrus: 1 }, effect: { vp: 7 } },
-      ],
+      sides: {
+        A: {
+          summary: "The second stage produces one raw material of your choice every turn.",
+          stages: [
+            { cost: { stone: 2 }, effect: { vp: 3 } },
+            { cost: { ore: 2 }, effect: { power: "produceRawChoice" } },
+            { cost: { glass: 2 }, effect: { vp: 7 } },
+          ],
+        },
+        B: {
+          summary: "A raw material of your choice each turn, then a manufactured good of your choice, then 7 VP.",
+          stages: [
+            { cost: { clay: 2 }, effect: { power: "produceRawChoice" } },
+            { cost: { wood: 2 }, effect: { power: "produceManufacturedChoice" } },
+            { cost: { stone: 3 }, effect: { vp: 7 } },
+          ],
+        },
+      },
     },
   ],
 
@@ -407,7 +518,7 @@ const GameData = {
       cost: { stone: 2 }, produces: [], producesChoice: false, vp: 5, shields: 0, coinsOnPlay: 0,
       science: null, effect: "Worth 5 VP.", chainFrom: ["baths"], chainTo: [], playerCount: 3 },
     { id: "temple", name: "Temple", emoji: "🏯", age: 2, type: "civilian",
-      cost: { wood: 1, clay: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 4, shields: 0, coinsOnPlay: 0,
+      cost: { wood: 1, clay: 1 }, produces: [], producesChoice: false, vp: 4, shields: 0, coinsOnPlay: 0,
       science: null, effect: "Worth 4 VP.", chainFrom: ["shrine"], chainTo: ["grand-temple"], playerCount: 3 },
     { id: "statue", name: "Statue", emoji: "🗽", age: 2, type: "civilian",
       cost: { ore: 2 }, produces: [], producesChoice: false, vp: 4, shields: 0, coinsOnPlay: 0,
@@ -432,10 +543,10 @@ const GameData = {
       cost: { loom: 2 }, produces: [], producesChoice: false, vp: 0, shields: 0, coinsOnPlay: 0,
       science: "tablet", effect: "Grants a Tablet science symbol.", chainFrom: ["scriptorium"], chainTo: ["university-of-science"], playerCount: 3 },
     { id: "observatory", name: "Observatory", emoji: "🧭", age: 2, type: "scientific",
-      cost: { ore: 2, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0, coinsOnPlay: 0,
+      cost: { ore: 2 }, produces: [], producesChoice: false, vp: 0, shields: 0, coinsOnPlay: 0,
       science: "compass", effect: "Grants a Compass science symbol.", chainFrom: [], chainTo: ["observatory-tower"], playerCount: 3 },
     { id: "pharmacy", name: "Pharmacy", emoji: "⚙️", age: 2, type: "scientific",
-      cost: { papyrus: 2, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0, coinsOnPlay: 0,
+      cost: { papyrus: 2 }, produces: [], producesChoice: false, vp: 0, shields: 0, coinsOnPlay: 0,
       science: "gear", effect: "Grants a Gear science symbol.", chainFrom: [], chainTo: ["lodge"], playerCount: 3 },
 
     { id: "customs-house", name: "Customs House", emoji: "🏦", age: 2, type: "commercial",
@@ -460,7 +571,7 @@ const GameData = {
       cost: { stone: 2 }, produces: [], producesChoice: false, vp: 0, shields: 2, coinsOnPlay: 0,
       science: null, effect: "Grants 2 Shields.", chainFrom: ["stockade"], chainTo: ["siege-camp"], playerCount: 3 },
     { id: "archery-range", name: "Archery Range", emoji: "🏹", age: 2, type: "military",
-      cost: { wood: 2, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 2, coinsOnPlay: 0,
+      cost: { wood: 2 }, produces: [], producesChoice: false, vp: 0, shields: 2, coinsOnPlay: 0,
       science: null, effect: "Grants 2 Shields.", chainFrom: ["barracks"], chainTo: ["citadel"], playerCount: 3 },
     { id: "training-ground", name: "Training Ground", emoji: "🎯", age: 2, type: "military",
       cost: { ore: 1, wood: 1 }, produces: [], producesChoice: false, vp: 0, shields: 2, coinsOnPlay: 0,
@@ -505,15 +616,15 @@ const GameData = {
       coinsOnPlay: 0, science: null, effect: "Worth 7 VP.", chainFrom: ["temple"], chainTo: [], playerCount: 3 },
 
     { id: "university-of-science", name: "University of Science", emoji: "📚", age: 3, type: "scientific",
-      cost: { papyrus: 2, loom: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { papyrus: 2, loom: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: "tablet", effect: "Grants a Tablet science symbol.",
       chainFrom: ["courthouse"], chainTo: [], playerCount: 3 },
     { id: "observatory-tower", name: "Observatory Tower", emoji: "🧭", age: 3, type: "scientific",
-      cost: { ore: 2, glass: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { ore: 2, glass: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: "compass", effect: "Grants a Compass science symbol.",
       chainFrom: ["observatory"], chainTo: [], playerCount: 3 },
     { id: "lodge", name: "Lodge", emoji: "⚙️", age: 3, type: "scientific",
-      cost: { loom: 2, clay: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { loom: 2, clay: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: "gear", effect: "Grants a Gear science symbol.",
       chainFrom: ["pharmacy"], chainTo: [], playerCount: 3 },
 
@@ -546,50 +657,50 @@ const GameData = {
       cost: { wood: 2, ore: 1 }, produces: [], producesChoice: false, vp: 0, shields: 3, coinsOnPlay: 0,
       science: null, effect: "Grants 3 Shields.", chainFrom: ["walls"], chainTo: [], playerCount: 3 },
     { id: "citadel", name: "Citadel", emoji: "🏰", age: 3, type: "military",
-      cost: { stone: 3, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 3, coinsOnPlay: 0,
+      cost: { stone: 3 }, produces: [], producesChoice: false, vp: 0, shields: 3, coinsOnPlay: 0,
       science: null, effect: "Grants 3 Shields.", chainFrom: ["archery-range"], chainTo: [], playerCount: 3 },
 
     // ---- Guilds (Age III, Purple) — scoring rules transcribed from docs/rules.md ----
     { id: "spies-guild", name: "Spies Guild", emoji: "🕵️", age: 3, type: "guild",
-      cost: { clay: 2, glass: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { clay: 2, glass: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "1 VP for each Military card present in both neighbouring cities.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "military", scope: "neighbors", per: 1 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "military", scope: "neighbors", per: 1 }, playerCount: 3 },
     { id: "magistrates-guild", name: "Magistrates Guild", emoji: "⚖️", age: 3, type: "guild",
-      cost: { stone: 2, wood: 1, loom: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { stone: 2, wood: 1, loom: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "1 VP for each Civilian card present in both neighbouring cities.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "civilian", scope: "neighbors", per: 1 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "civilian", scope: "neighbors", per: 1 }, playerCount: 3 },
     { id: "workers-guild", name: "Workers Guild", emoji: "👷", age: 3, type: "guild",
-      cost: { ore: 2, clay: 1, stone: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { ore: 2, clay: 1, stone: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "1 VP for each Raw Material card present in both neighbouring cities.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "basic", scope: "neighbors", per: 1 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "basic", scope: "neighbors", per: 1 }, playerCount: 3 },
     { id: "craftsmens-guild", name: "Craftsmens Guild", emoji: "🛠️", age: 3, type: "guild",
-      cost: { ore: 2, stone: 2, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { ore: 2, stone: 2 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "2 VP for each Manufactured Good card present in both neighbouring cities.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "manufactured", scope: "neighbors", per: 2 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "manufactured", scope: "neighbors", per: 2 }, playerCount: 3 },
     { id: "traders-guild", name: "Traders Guild", emoji: "🧳", age: 3, type: "guild",
-      cost: { loom: 1, papyrus: 1, glass: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { loom: 1, papyrus: 1, glass: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "1 VP for each Commercial card present in both neighbouring cities.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "commercial", scope: "neighbors", per: 1 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "commercial", scope: "neighbors", per: 1 }, playerCount: 3 },
     { id: "philosophers-guild", name: "Philosophers Guild", emoji: "📖", age: 3, type: "guild",
-      cost: { clay: 3, loom: 1, papyrus: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { clay: 3, loom: 1, papyrus: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "1 VP for each Scientific card present in both neighbouring cities.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "scientific", scope: "neighbors", per: 1 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countCardType", cardType: "scientific", scope: "neighbors", per: 1 }, playerCount: 3 },
     { id: "builders-guild", name: "Builders Guild", emoji: "🏗️", age: 3, type: "guild",
-      cost: { stone: 2, clay: 2, glass: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { stone: 2, clay: 2, glass: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "1 VP for each Wonder stage built in the neighbouring cities and in your own city.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countWonderStages", scope: "neighborsAndSelf", per: 1 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countWonderStages", scope: "neighborsAndSelf", per: 1 }, playerCount: 3 },
     { id: "shipowners-guild", name: "Shipowners Guild", emoji: "🚢", age: 3, type: "guild",
-      cost: { wood: 3, papyrus: 1, glass: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { wood: 3, papyrus: 1, glass: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "1 VP for each Raw Material, Manufactured Good, and Guild card in your city.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countCardTypes", cardTypes: ["basic", "manufactured", "guild"], scope: "self", per: 1 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countCardTypes", cardTypes: ["basic", "manufactured", "guild"], scope: "self", per: 1 }, playerCount: 3 },
     { id: "strategists-guild", name: "Strategists Guild", emoji: "🎖️", age: 3, type: "guild",
-      cost: { ore: 2, stone: 1, loom: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { ore: 2, stone: 1, loom: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "1 VP for each defeat token present in the neighbouring cities.",
-      chainFrom: [], chainTo: [], guildRule: { kind: "countDefeatTokens", scope: "neighbors", per: 1 } },
+      chainFrom: [], chainTo: [], guildRule: { kind: "countDefeatTokens", scope: "neighbors", per: 1 }, playerCount: 3 },
     { id: "scientists-guild", name: "Scientists Guild", emoji: "🔬", age: 3, type: "guild",
-      cost: { wood: 2, ore: 2, papyrus: 1, playerCount: 3 }, produces: [], producesChoice: false, vp: 0, shields: 0,
+      cost: { wood: 2, ore: 2, papyrus: 1 }, produces: [], producesChoice: false, vp: 0, shields: 0,
       coinsOnPlay: 0, science: null, effect: "Gain an extra scientific symbol of your choice.",
-      chainFrom: [], chainTo: [], special: "extraScienceSymbol" },
+      chainFrom: [], chainTo: [], special: "extraScienceSymbol", playerCount: 3 },
   ],
 };
 

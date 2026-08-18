@@ -23,6 +23,7 @@ GD.CARDS.forEach((c) => { CARD_BY_ID[c.id] = c; });
 const WONDER_BY_ID = {};
 GD.WONDERS.forEach((w) => { WONDER_BY_ID[w.id] = w; });
 
+const RAW_RESOURCES = ["wood", "clay", "ore", "stone"];
 const MANUFACTURED_RESOURCES = ["glass", "loom", "papyrus"];
 const MILITARY_TOKEN_BY_AGE = { 1: 1, 2: 3, 3: 5 };
 
@@ -49,10 +50,30 @@ function playersInScope(game, playerIdx, scope) {
   return [playerIdx]; // 'self' or unspecified
 }
 
-function hasPower(player, powerName) {
+// How many *built* stages of this player's Wonder grant `powerName`. Most powers appear on a
+// single stage, but Halikarnassos B carries `discardPileBuild` on all three — each built stage
+// is a separate use of it — so anything charge-based counts rather than tests.
+function powerUses(player, powerName) {
   return player.wonder.stages
     .slice(0, player.wonderStagesBuilt)
-    .some((s) => s.effect.power === powerName);
+    .filter((s) => s.effect.power === powerName).length;
+}
+
+function hasPower(player, powerName) {
+  return powerUses(player, powerName) > 0;
+}
+
+// Resolves a board + side ("A" | "B") into the flat per-player Wonder object the rest of the
+// engine reads: the board's identity plus just the chosen face's stage list. Stage counts differ
+// per side (Rhodos B has 2, Gizah B has 4), so nothing may assume 3.
+function resolveWonder(board, side) {
+  const face = board.sides[side] || board.sides.A;
+  return {
+    id: board.id, name: board.name, emoji: board.emoji, resource: board.resource,
+    side: board.sides[side] ? side : "A",
+    summary: face.summary,
+    stages: face.stages,
+  };
 }
 
 // ---- setup / dealing ----
@@ -75,20 +96,34 @@ function buildDeckPools(numPlayers) {
   const age3NeedNonGuild = handTotal - guildsToKeep.length;
   const age3 = shuffle([...age3NonGuild.slice(0, age3NeedNonGuild), ...guildsToKeep]).map((c) => c.id);
 
-  return { 1: age1, 2: age2, 3: age3 };
+  const pools = { 1: age1, 2: age2, 3: age3 };
+  // Short pools deal short (or empty) hands rather than failing visibly, which surfaces much
+  // later as a player with nothing to do mid-Age. Catch it here instead.
+  Object.entries(pools).forEach(([age, pool]) => {
+    if (pool.length < handTotal) {
+      throw new Error(
+        `Age ${age} card pool holds ${pool.length} cards but ${numPlayers} players need ${handTotal}`
+      );
+    }
+  });
+  return pools;
 }
 
 function createGame(numPlayers, options = {}) {
   if (!GD.SUPPORTED_PLAYER_COUNTS.includes(numPlayers)) {
     throw new Error(`Unsupported player count: ${numPlayers} (supported: ${GD.SUPPORTED_PLAYER_COUNTS.join(", ")})`);
   }
+  // Board side is a table-wide setting, the way the physical game is normally set up: everyone
+  // plays the simple A faces or everyone plays the advanced B faces, rather than mixing.
+  const side = options.wonderSide === "B" ? "B" : "A";
   const wonderPool = shuffle(GD.WONDERS);
-  let wonders = wonderPool;
+  let boards = wonderPool;
   if (options.humanWonderId) {
     const chosen = WONDER_BY_ID[options.humanWonderId];
     const rest = shuffle(wonderPool.filter((w) => w.id !== options.humanWonderId));
-    wonders = [chosen, ...rest];
+    boards = [chosen, ...rest];
   }
+  const wonders = boards.map((board) => resolveWonder(board, side));
 
   const players = [];
   for (let i = 0; i < numPlayers; i++) {
@@ -103,7 +138,9 @@ function createGame(numPlayers, options = {}) {
       hand: [],
       militaryTokens: [],
       freeBuildUsedThisAge: false,
-      discardPileBuildUsedThisAge: false,
+      // Charges, not a once-per-Age flag: each built stage granting `discardPileBuild` is one
+      // use of it (Halikarnassos B grants three over the game). Topped up in applyWonderStage.
+      discardPileBuildsAvailable: 0,
       // Trading-post-style discount cards apply "starting on the turn following" construction
       // (docs/rules.md), tracked as the first game.globalTurn the discount is active from.
       tradeDiscountReadyTurn: { basic: null, manufactured: null },
@@ -112,6 +149,7 @@ function createGame(numPlayers, options = {}) {
 
   const game = {
     numPlayers,
+    wonderSide: side,
     players,
     deckPools: buildDeckPools(numPlayers),
     discardPile: [],
@@ -134,7 +172,6 @@ function startAge(game, age) {
   game.players.forEach((p, idx) => {
     p.hand = pool.slice(idx * 7, idx * 7 + 7);
     p.freeBuildUsedThisAge = false;
-    p.discardPileBuildUsedThisAge = false;
   });
   game.log.push(`Age ${age} begins.`);
 }
@@ -155,6 +192,15 @@ function passHands(game, direction) {
 
 // ---- production & cost solving ----
 
+// A player's whole production: their Wonder board's starting resource, everything their built
+// cards make, and anything their built Wonder stages make (Alexandria).
+//
+// `choices` holds one entry per "1 of N each turn" source, as `{ options, tradeable }`.
+// `tradeable` is what neighbours are allowed to buy, per docs/rules.md's per-Age clarifications:
+// a brown card producing "Wood **or** Clay" may be bought either way regardless of what its
+// owner uses it for, but the choice-production on yellow cards (Caravansery, Forum) and on
+// Alexandria's Wonder stages is explicitly reserved for its owner. Fixed production is always
+// tradeable — including the Wonder board's own starting resource.
 function computeProduction(game, playerIdx) {
   const p = game.players[playerIdx];
   const fixed = {};
@@ -164,11 +210,18 @@ function computeProduction(game, playerIdx) {
     const c = CARD_BY_ID[id];
     if (!c.produces || !c.produces.length) return;
     if (c.producesChoice) {
-      choices.push(c.produces);
+      const tradeable = c.type === "basic" || c.type === "manufactured";
+      choices.push({ options: c.produces, tradeable });
     } else {
       c.produces.forEach((r) => { fixed[r] = (fixed[r] || 0) + (c.produceCount || 1); });
     }
   });
+  for (let i = 0; i < powerUses(p, "produceRawChoice"); i++) {
+    choices.push({ options: RAW_RESOURCES, tradeable: false });
+  }
+  for (let i = 0; i < powerUses(p, "produceManufacturedChoice"); i++) {
+    choices.push({ options: MANUFACTURED_RESOURCES, tradeable: false });
+  }
   return { fixed, choices };
 }
 
@@ -193,7 +246,7 @@ function solveCost(production, cost) {
       if (!best || total < best.total) best = { shortfall, total };
       return;
     }
-    for (const option of choices[idx]) {
+    for (const option of choices[idx].options) {
       chosen.push(option);
       tryAssignment(idx + 1, chosen);
       chosen.pop();
@@ -207,6 +260,10 @@ function solveCost(production, cost) {
 function tradeUnitCost(game, playerIdx, resource) {
   const p = game.players[playerIdx];
   const category = MANUFACTURED_RESOURCES.includes(resource) ? "manufactured" : "basic";
+  // Olympia B's first stage is the two Trading Posts rolled into one, and unlike the cards its
+  // board text carries no "starting the turn following" delay — it applies from the moment the
+  // stage is built.
+  if (category === "basic" && hasPower(p, "cheapRawTrade")) return 1;
   const readyTurn = p.tradeDiscountReadyTurn[category];
   return readyTurn != null && game.globalTurn >= readyTurn ? 1 : 2;
 }
@@ -227,7 +284,8 @@ function canAffordWithCommerce(game, playerIdx, cost) {
   const leftProd = computeProduction(game, left);
   const rightProd = computeProduction(game, right);
   const canSupply = (prod, resource) =>
-    (prod.fixed[resource] || 0) > 0 || prod.choices.some((opts) => opts.includes(resource));
+    (prod.fixed[resource] || 0) > 0 ||
+    prod.choices.some((ch) => ch.tradeable && ch.options.includes(resource));
 
   let coinsNeeded = 0;
   const purchases = [];
@@ -297,8 +355,13 @@ function applyWonderStage(game, playerIdx, cardId) {
   p.hand = p.hand.filter((id) => id !== cardId);
   p.wonderStagesBuilt += 1;
   p.coins += stage.effect.coins || 0;
+  // Halikarnassos' power fires off the *building* of the stage, so each such stage banks one
+  // discard-pile build; the player spends it at the end of this turn (or later).
+  if (stage.effect.power === "discardPileBuild") p.discardPileBuildsAvailable += 1;
 
-  game.log.push(`${p.name} builds Wonder stage ${p.wonderStagesBuilt} of ${p.wonder.name}.`);
+  game.log.push(
+    `${p.name} builds Wonder stage ${p.wonderStagesBuilt} of ${p.wonder.name} (side ${p.wonder.side}).`
+  );
   return { success: true };
 }
 
@@ -332,18 +395,24 @@ function applyFreeBuildFromHand(game, playerIdx, cardId) {
   return { success: true };
 }
 
-// Halikarnassos-style power: once per Age, reclaim any card from the shared discard pile and
-// build it for free. Also a bonus action, independent of the hand-card turn action.
+// Halikarnassos' power: reclaim any card discarded since the start of the game and build it for
+// free. One use is banked per built stage carrying the power (side A grants one, side B three),
+// spent at any later point; it is a bonus action, independent of the hand-card turn action.
+// A card already in the player's city can't be built twice, per the no-duplicates rule.
 function applyDiscardPileBuild(game, playerIdx, cardId) {
   const p = game.players[playerIdx];
-  if (!hasPower(p, "discardPileBuild") || p.discardPileBuildUsedThisAge) return { success: false, reason: "power-unavailable" };
+  if (p.discardPileBuildsAvailable <= 0) return { success: false, reason: "power-unavailable" };
   if (!game.discardPile.includes(cardId)) return { success: false, reason: "not-in-discard" };
+  if (p.built.includes(cardId)) return { success: false, reason: "already-built" };
   const card = CARD_BY_ID[cardId];
 
   game.discardPile = game.discardPile.filter((id) => id !== cardId);
   p.built.push(cardId);
-  p.discardPileBuildUsedThisAge = true;
+  p.discardPileBuildsAvailable -= 1;
   p.coins += card.coinsOnPlay || 0;
+  if (card.coinsPerCardType) p.coins += countCardType(game, playerIdx, card.coinsPerCardType) * card.coinsPerCardType.per;
+  if (card.coinsPerWonderStage) p.coins += countWonderStages(game, playerIdx, card.coinsPerWonderStage.scope) * card.coinsPerWonderStage.per;
+  if (card.tradeDiscount) p.tradeDiscountReadyTurn[card.tradeDiscount.category] = game.globalTurn + 1;
 
   game.log.push(`${p.name} reclaims ${card.name} from the discard pile.`);
   return { success: true };
@@ -372,6 +441,7 @@ function getAvailableActionsForCard(game, playerIdx, cardId) {
     canWonder: !!wonderNextStage && wonderAfford.ok,
     wonderCoinsNeeded: wonderAfford.coinsNeeded || 0,
     wonderStageIndex: p.wonderStagesBuilt,
+    wonderStageCount: p.wonder.stages.length,
     canDiscard: true,
   };
 }
@@ -431,9 +501,13 @@ function aiUseBonusPowers(game, playerIdx) {
       applyFreeBuildFromHand(game, playerIdx, best);
     }
   }
-  if (hasPower(p, "discardPileBuild") && !p.discardPileBuildUsedThisAge && game.discardPile.length) {
-    const best = game.discardPile.slice().sort((a, b) => cardHeuristicValue(CARD_BY_ID[b]) - cardHeuristicValue(CARD_BY_ID[a]))[0];
-    if (cardHeuristicValue(CARD_BY_ID[best]) > 3) applyDiscardPileBuild(game, playerIdx, best);
+  // Charge-based, so spend them in a loop: Halikarnassos B can be sitting on three at once.
+  while (p.discardPileBuildsAvailable > 0) {
+    const candidates = game.discardPile.filter((id) => !p.built.includes(id));
+    if (!candidates.length) break;
+    const best = candidates.sort((a, b) => cardHeuristicValue(CARD_BY_ID[b]) - cardHeuristicValue(CARD_BY_ID[a]))[0];
+    if (cardHeuristicValue(CARD_BY_ID[best]) <= 3) break;
+    if (!applyDiscardPileBuild(game, playerIdx, best).success) break;
   }
 }
 
@@ -471,8 +545,8 @@ function resolveMilitary(game) {
 
 // ---- turn/age flow ----
 
-// A power that lets the player choose what happens to the Age's automatically-discarded last
-// card (docs/rules.md "BOARDS"), instead of it being silently discarded for no coins. Resolved
+// Babylon B's power: play the Age's 7th card instead of discarding it — build it, spend it on a
+// Wonder stage, or discard it for 3 coins (docs/rules.md "Wonder boards"). Resolved
 // automatically (best available action) for both AI and the human — no dedicated UI for this
 // rare corner (documented simplification, docs/requirements.md §3b).
 function resolveLeftoverCard(game, playerIdx) {
@@ -480,8 +554,14 @@ function resolveLeftoverCard(game, playerIdx) {
   if (!p.hand.length) return;
   const cardId = p.hand[0];
   if (hasPower(p, "lastCardAlternative")) {
-    const wonderTry = applyWonderStage(game, playerIdx, cardId);
-    if (!wonderTry.success) applyDiscard(game, playerIdx, cardId);
+    const card = CARD_BY_ID[cardId];
+    const buildable = !p.built.includes(cardId) &&
+      canAffordWithCommerce(game, playerIdx, effectiveCost(game, playerIdx, card)).ok;
+    // 3 coins is worth 1 VP, so anything the card scores above that beats discarding it.
+    const worthBuilding = buildable && cardHeuristicValue(card) > 2;
+    if (!worthBuilding || !applyBuild(game, playerIdx, cardId).success) {
+      if (!applyWonderStage(game, playerIdx, cardId).success) applyDiscard(game, playerIdx, cardId);
+    }
   } else {
     game.discardPile.push(cardId);
     p.hand = [];
@@ -577,11 +657,15 @@ function scienceScoreFromCounts(t) {
   return t.tablet ** 2 + t.compass ** 2 + t.gear ** 2 + 7 * Math.min(t.tablet, t.compass, t.gear);
 }
 
-// Scientists Guild grants "an extra scientific symbol of your choice" — greedily assigns each
-// such bonus to whichever symbol currently maximizes the resulting score.
+// "An extra scientific symbol of your choice" (Scientists Guild, and Babylon's Wonder stages) —
+// greedily assigns each such bonus to whichever symbol currently maximizes the resulting score.
 function computeScienceScore(game, playerIdx) {
   let tally = scienceCounts(game, playerIdx);
-  const specials = game.players[playerIdx].built.filter((id) => CARD_BY_ID[id].special === "extraScienceSymbol").length;
+  const p = game.players[playerIdx];
+  // Scientists Guild plus any built Wonder stage granting the same thing (Babylon A stage 2,
+  // Babylon B stage 3). Both are chosen at the end of the game, when points are counted.
+  const specials = p.built.filter((id) => CARD_BY_ID[id].special === "extraScienceSymbol").length +
+    powerUses(p, "extraScienceSymbol");
   for (let i = 0; i < specials; i++) {
     let bestKey = null;
     let bestScore = -Infinity;
@@ -651,7 +735,9 @@ function computeFinalScores(game) {
       const guildResult = computeGuildScore(game, idx);
       const total = military + treasury + wonder + civilian + scientific + commercial + guildResult.total;
       return {
-        playerIdx: idx, name: p.name, coins: p.coins, wonderName: p.wonder.name,
+        playerIdx: idx, name: p.name, coins: p.coins,
+        wonderId: p.wonder.id, wonderName: p.wonder.name, wonderSide: p.wonder.side,
+        wonderStagesBuilt: p.wonderStagesBuilt,
         military, treasury, wonder, civilian, scientific, commercial,
         guilds: guildResult.total, guildDetails: guildResult.details, total,
       };
@@ -672,7 +758,7 @@ const GameEngine = {
   aiChooseAction, aiUseBonusPowers, runAiTurns,
   computeMilitaryStrength, resolveMilitary,
   playHumanTurn, advanceAfterHuman, finishTurn,
-  hasPower, neighborsOf,
+  hasPower, powerUses, resolveWonder, neighborsOf,
   computeFinalScores, computeScienceScore, computeGuildScore, guildScoreForRule,
 };
 

@@ -479,6 +479,30 @@ html, body {
 }
 .wonder-card .wonder-name { font-size: 0.85rem; font-weight: 700; }
 .wonder-card .wonder-resource { font-size: 0.7rem; color: var(--text-dim); }
+/* Which face of the board is in play (A = simple, B = advanced) — small enough to sit inline
+   next to a Wonder's name wherever one is shown. */
+.wonder-side-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #17140b;
+  font-size: 0.65rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.wonder-summary { font-size: 0.7rem; line-height: 1.35; color: var(--text-dim); margin: 0; }
+.setup-hint { margin: -6px 0 0; font-size: 0.75rem; color: var(--text-dim); }
+.wonder-stage-row {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.wonder-stage-title { font-weight: 700; margin-bottom: 6px; }
+.wonder-stage-power { margin-top: 4px; font-size: 0.78rem; line-height: 1.4; color: var(--text-dim); }
+.score-wonder { font-size: 0.65rem; font-weight: 400; color: var(--text-dim); }
 
 /* ---- age-end / game-end screens ---- */
 .ageend-panel, .gameend-panel {
@@ -504,7 +528,10 @@ html, body {
 .token-badge.neg { background: rgba(224, 85, 94, 0.2); color: var(--danger); }
 
 .score-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-.score-table th, .score-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); }
+.score-table th, .score-table td { padding: 6px 5px; text-align: right; border-bottom: 1px solid var(--border); }
+/* The name column carries a second line (Wonder + side + stages built), so cap it rather than
+   let it push the totals column out of the panel on a ~360px viewport. */
+.score-table td:first-child, .score-table th:first-child { max-width: 84px; }
 .score-table th:first-child, .score-table td:first-child { text-align: left; }
 .score-table thead th { color: var(--text-dim); font-weight: 600; font-size: 0.7rem; text-transform: uppercase; }
 .score-table tbody tr.winner { background: rgba(240, 198, 116, 0.12); }

@@ -8,7 +8,7 @@ const SAVE_KEY = "sevenwonders_save"; // not yet wired up — no persistence imp
 const state = {
   screen: "setup", // 'setup' | 'hand' | 'ageEnd' | 'gameEnd'
   game: null,
-  setup: { numPlayers: 4, wonderId: null },
+  setup: { numPlayers: 4, wonderId: null, wonderSide: "A", detailWonderId: null },
   selectedCardId: null,
   freeBuildArmed: false,
   showCity: false,
@@ -300,7 +300,7 @@ function renderRivalCityModal(game, rivalIdx) {
     .map(([res, count]) => `<span class="icon-badge">${resIcon(res)}×${count}</span>`)
     .join("");
   const choiceResources = prod.choices.length > 0
-    ? prod.choices.map(opts => `<span class="icon-badge" title="Choose one">${opts.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
+    ? prod.choices.map(ch => `<span class="icon-badge" title="${ch.tradeable ? "Choose one each turn" : "Choose one each turn — neighbours cannot buy this"}">${ch.options.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
     : "";
   const resourceDisplay = fixedResources || choiceResources
     ? `<div class="card-row"><span class="label">Resources:</span>${fixedResources}${choiceResources}</div>`
@@ -337,7 +337,7 @@ function renderCityPanel(game) {
     .map(([res, count]) => `<span class="icon-badge">${resIcon(res)}${count}</span>`)
     .join("");
   const choiceResources = prod.choices.length > 0
-    ? prod.choices.map(opts => `<span class="icon-badge" title="Choose one">${opts.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
+    ? prod.choices.map(ch => `<span class="icon-badge" title="${ch.tradeable ? "Choose one each turn" : "Choose one each turn — neighbours cannot buy this"}">${ch.options.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
     : "";
   const resourceDisplay = fixedResources || choiceResources
     ? `<div class="card-row"><span class="label">Resources</span>${fixedResources}${choiceResources}</div>`
@@ -359,7 +359,7 @@ function renderCityPanel(game) {
       ${resourceDisplay}
       <div class="city-chips">${chips}</div>
       <div class="card-row">
-        <span class="label">${me.wonder.name}</span>
+        <span class="label">${me.wonder.name} <span class="wonder-side-tag">Side ${me.wonder.side}</span></span>
         <span class="wonder-progress">
           ${me.wonder.stages.map((_, i) => `<span class="wonder-stage-dot${i < me.wonderStagesBuilt ? " built" : ""}" title="Stage ${i + 1}"></span>`).join("")}
         </span>
@@ -375,8 +375,9 @@ function renderPowerRow(game) {
   if (GameEngine.hasPower(me, "freeBuildPerAge") && !me.freeBuildUsedThisAge) {
     parts.push(`<button type="button" class="power-btn" id="power-freebuild">✨ ${state.freeBuildArmed ? "Tap a card…" : "Free Build (once/Age)"}</button>`);
   }
-  if (GameEngine.hasPower(me, "discardPileBuild") && !me.discardPileBuildUsedThisAge && game.discardPile.length) {
-    parts.push(`<button type="button" class="power-btn" id="power-reclaim">🗑️ Reclaim from Discard</button>`);
+  if (me.discardPileBuildsAvailable > 0 && game.discardPile.length) {
+    const n = me.discardPileBuildsAvailable;
+    parts.push(`<button type="button" class="power-btn" id="power-reclaim">🗑️ Reclaim from Discard${n > 1 ? ` (${n} left)` : ""}</button>`);
   }
   return parts.length ? `<div class="power-row">${parts.join("")}</div>` : "";
 }
@@ -441,47 +442,52 @@ function renderActionBarSlot(game) {
 
 // ---- screens ----
 
-function renderWonderCard(w, selected) {
+function renderWonderCard(w, side, selected) {
   const wonderImage = GameData.WONDER_IMAGES[w.id];
+  const face = w.sides[side];
   return `
     <button type="button" class="wonder-card${selected ? " selected" : ""}" data-wonder="${w.id}" title="Click to view stages">
       ${wonderImage
         ? `<span class="wonder-art" role="img" aria-label="${escapeHtml(w.name)}" style="background-image:url('${wonderImage}');"></span>`
         : `<div class="wonder-emoji">${w.emoji}</div>`}
-      <div class="wonder-name">${escapeHtml(w.name)}</div>
+      <div class="wonder-name">${escapeHtml(w.name)} <span class="wonder-side-tag">${side}</span></div>
       <div class="wonder-resource">Produces ${resIcon(w.resource)} ${GameData.RESOURCES[w.resource].label}</div>
+      <div class="wonder-summary">${escapeHtml(face.summary)}</div>
     </button>
   `;
 }
 
-function renderWonderDetailModal(wonderId) {
-  const wonder = GameData.WONDERS.find(w => w.id === wonderId);
-  if (!wonder) return "";
+// One stage's effect: the scoring icons on one row, and the special power (if any) as its own
+// sentence below. `power` is looked up in GameData.WONDER_POWERS so the rule wording lives in
+// the data file, not here.
+function wonderStageEffectHtml(effect) {
+  const bits = [];
+  if (effect.vp) bits.push(`${effect.vp} ${iconImg(GameData.ICONS.vp, "victory points")}`);
+  if (effect.coins) bits.push(`+${effect.coins} ${iconImg(GameData.ICONS.coins, "coins")}`);
+  if (effect.shields) bits.push(`${effect.shields} ${iconImg(GameData.ICONS.shields, "shields")}`);
+  const power = effect.power
+    ? `<div class="wonder-stage-power">${escapeHtml(GameData.WONDER_POWERS[effect.power] || effect.power)}</div>`
+    : "";
+  const scoring = bits.length
+    ? `<div class="card-row"><span class="label">Effect:</span> ${bits.join(" • ")}</div>`
+    : (power ? "" : `<div class="card-row"><span class="label">Effect:</span> —</div>`);
+  return `${scoring}${power}`;
+}
 
-  const stagesHtml = wonder.stages.map((stage, idx) => {
+function renderWonderDetailModal(wonderId, side) {
+  const wonder = GameData.WONDERS.find((w) => w.id === wonderId);
+  if (!wonder) return "";
+  const face = wonder.sides[side];
+
+  const stagesHtml = face.stages.map((stage, idx) => {
     const costHtml = Object.entries(stage.cost)
       .map(([res, count]) => `<span class="icon-badge">${costIcon(res)}${count > 1 ? count : ""}</span>`)
       .join("");
-    const effectHtml = Object.entries(stage.effect)
-      .filter(([key, val]) => val > 0)
-      .map(([key, val]) => {
-        if (key === "vp") return `${val} VP`;
-        if (key === "coins") return `${iconImg(GameData.ICONS.coins, "Coins")} +${val}`;
-        if (key === "shields") return `${val} ${iconImg(GameData.ICONS.shields, "Shields")}`;
-        if (key === "power") return `Special power: ${val}`;
-        return `${key}: ${val}`;
-      })
-      .join(" • ");
-
     return `
-      <div style="background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px;">
-        <div style="font-weight: 700; margin-bottom: 6px;">Stage ${idx + 1}</div>
-        <div class="card-row" style="margin-bottom: 6px;">
-          <span class="label">Cost:</span> ${costHtml || '<span class="label">Free</span>'}
-        </div>
-        <div class="card-row">
-          <span class="label">Effect:</span> ${effectHtml}
-        </div>
+      <div class="wonder-stage-row">
+        <div class="wonder-stage-title">Stage ${idx + 1}</div>
+        <div class="card-row"><span class="label">Cost:</span> ${costHtml || '<span class="label">Free</span>'}</div>
+        ${wonderStageEffectHtml(stage.effect)}
       </div>
     `;
   }).join("");
@@ -489,11 +495,12 @@ function renderWonderDetailModal(wonderId) {
   return `
     <div class="modal-overlay" id="wonder-detail-modal">
       <div class="modal-panel">
-        <h3>${wonder.emoji} ${escapeHtml(wonder.name)}</h3>
-        <div class="card-row" style="margin-bottom: 12px;">
+        <h3>${wonder.emoji} ${escapeHtml(wonder.name)} — Side ${side}</h3>
+        <div class="card-row" style="margin-bottom: 8px;">
           <span class="label">Starting Resource:</span> ${resIcon(wonder.resource)} ${GameData.RESOURCES[wonder.resource].label}
         </div>
-        <h4 style="margin-bottom: 8px;">Construction Stages</h4>
+        <p class="wonder-summary">${escapeHtml(face.summary)}</p>
+        <h4 style="margin-bottom: 8px;">Construction Stages (${face.stages.length})</h4>
         ${stagesHtml}
         <button type="button" class="primary" id="close-wonder-modal" style="margin-top: 12px; width: 100%;">Close</button>
       </div>
@@ -510,12 +517,20 @@ function renderSetup(app) {
       <div class="count-row" id="count-row">
         ${GameData.SUPPORTED_PLAYER_COUNTS.map((n) => `<button type="button" class="count-btn${state.setup.numPlayers === n ? " selected" : ""}" data-count="${n}">${n}</button>`).join("")}
       </div>
+      <h2>Board side</h2>
+      <div class="count-row" id="side-row">
+        ${["A", "B"].map((sd) => `<button type="button" class="count-btn${state.setup.wonderSide === sd ? " selected" : ""}" data-side="${sd}">${sd}</button>`).join("")}
+      </div>
+      <p class="setup-hint">${state.setup.wonderSide === "A"
+        ? "Side A — the simple faces: mostly victory points, one special power per board."
+        : "Side B — the advanced faces: stronger powers, and stage counts that vary by board."}</p>
       <h2>Choose your Wonder</h2>
       <div class="wonder-grid" id="wonder-grid">
-        ${GameData.WONDERS.map((w) => renderWonderCard(w, w.id === state.setup.wonderId)).join("")}
+        ${GameData.WONDERS.map((w) => renderWonderCard(w, state.setup.wonderSide, w.id === state.setup.wonderId)).join("")}
       </div>
       <button type="button" id="start-btn" class="primary" ${state.setup.wonderId ? "" : "disabled"}>▶️ Start Game</button>
     </div>
+    ${state.setup.detailWonderId ? renderWonderDetailModal(state.setup.detailWonderId, state.setup.wonderSide) : ""}
   `;
 
   document.getElementById("count-row").querySelectorAll(".count-btn").forEach((btn) => {
@@ -524,28 +539,34 @@ function renderSetup(app) {
       render();
     });
   });
-  document.getElementById("wonder-grid").querySelectorAll(".wonder-card").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      // Show detail modal
-      const app = document.getElementById("app");
-      const detailHtml = renderWonderDetailModal(btn.dataset.wonder);
-      const detailEl = new DOMParser().parseFromString(detailHtml, "text/html").body.firstChild;
-      app.appendChild(detailEl);
-
-      // Setup select and close handlers
-      document.getElementById("close-wonder-modal").addEventListener("click", () => {
-        detailEl.remove();
-      });
-
-      // Also select when detail opens (optional - can remove if you prefer to select separately)
-      state.setup.wonderId = btn.dataset.wonder;
+  document.getElementById("side-row").querySelectorAll(".count-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.setup.wonderSide = btn.dataset.side;
       render();
     });
   });
+  // Picking a board both selects it and opens its detail sheet. The sheet is part of the setup
+  // screen's own markup (driven by state.setup.detailWonderId) rather than a node appended after
+  // the fact — appending it and then calling render() would immediately discard it.
+  document.getElementById("wonder-grid").querySelectorAll(".wonder-card").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      state.setup.wonderId = btn.dataset.wonder;
+      state.setup.detailWonderId = btn.dataset.wonder;
+      render();
+    });
+  });
+  const closeDetail = () => { state.setup.detailWonderId = null; render(); };
+  document.getElementById("close-wonder-modal")?.addEventListener("click", closeDetail);
+  document.getElementById("wonder-detail-modal")?.addEventListener("click", (e) => {
+    if (e.target.id === "wonder-detail-modal") closeDetail();
+  });
   document.getElementById("start-btn").addEventListener("click", () => {
     if (!state.setup.wonderId) return;
-    state.game = GameEngine.createGame(state.setup.numPlayers, { humanWonderId: state.setup.wonderId });
+    state.game = GameEngine.createGame(state.setup.numPlayers, {
+      humanWonderId: state.setup.wonderId,
+      wonderSide: state.setup.wonderSide,
+    });
     state.screen = "hand";
     state.selectedCardId = null;
     render();
@@ -740,7 +761,10 @@ function renderGameEnd(app) {
   const rows = scores
     .map((s, rank) => `
       <tr class="${rank === 0 ? "winner" : ""}">
-        <td>${rank === 0 ? iconImg(GameData.ICONS.vp, "Winner") + " " : ""}${escapeHtml(s.name)}</td>
+        <td>
+          ${rank === 0 ? iconImg(GameData.ICONS.vp, "Winner") + " " : ""}${escapeHtml(s.name)}
+          <div class="score-wonder">${escapeHtml(s.wonderName)} ${s.wonderSide} · ${s.wonderStagesBuilt}/${GameEngine.WONDER_BY_ID[s.wonderId].sides[s.wonderSide].stages.length}</div>
+        </td>
         <td>${s.military}</td><td>${s.treasury}</td><td>${s.wonder}</td><td>${s.civilian}</td>
         <td>${s.scientific}</td><td>${s.commercial}</td><td>${s.guilds}</td>
         <td class="total-col">${s.total}</td>
@@ -769,7 +793,7 @@ function renderGameEnd(app) {
     state.screen = "setup";
     state.game = null;
     state.selectedCardId = null;
-    state.setup = { numPlayers: 4, wonderId: null };
+    state.setup = { numPlayers: 4, wonderId: null, wonderSide: "A", detailWonderId: null };
     render();
   });
 }

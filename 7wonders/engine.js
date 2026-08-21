@@ -58,6 +58,22 @@ function powerUses(player, powerName) {
 function hasPower(player, powerName) {
     return powerUses(player, powerName) > 0;
 }
+// Looks up a card's ability of a given kind, if it has one — the single read path for the
+// abilities list (src/types.d.ts's CardAbility), replacing what used to be direct property
+// access (card.science, card.tradeDiscount, etc.) on always-present-but-usually-empty fields.
+// The cast is because comparing `a.kind === kind` against a generic type parameter doesn't
+// narrow `a` the way comparing against a literal would — the runtime check is exact regardless.
+function findAbility(card, kind) {
+    return card.abilities?.find((a) => a.kind === kind);
+}
+// Guild scoring rules are 4 of CardAbility's kinds at once (see GuildRule in src/types.d.ts), so
+// there's no single `kind` to hand findAbility — this checks for any of the four.
+const GUILD_RULE_KINDS = new Set([
+    "countCardType", "countCardTypes", "countWonderStages", "countDefeatTokens",
+]);
+function guildRuleOf(card) {
+    return card.abilities?.find((a) => GUILD_RULE_KINDS.has(a.kind));
+}
 // Resolves a board + side ("A" | "B") into the flat per-player Wonder object the rest of the
 // engine reads: the board's identity plus just the chosen face's stage list. Stage counts differ
 // per side (Rhodos B has 2, Gizah B has 4), so nothing may assume 3.
@@ -299,6 +315,22 @@ function effectiveCost(game, playerIdx, card) {
     return freeViaChain ? {} : (card.cost || {});
 }
 // ---- turn actions ----
+// Coin/discount abilities that trigger the moment a card enters play, shared by every "add this
+// card to a player's built city" action (applyBuild, applyFreeBuildFromHand,
+// applyDiscardPileBuild all called this same block inline before it was factored out here).
+function applyOnBuildEffects(game, playerIdx, card) {
+    const p = game.players[playerIdx];
+    p.coins += card.coinsOnPlay || 0;
+    const coinsPerCardType = findAbility(card, "coinsPerCardType");
+    if (coinsPerCardType)
+        p.coins += countCardType(game, playerIdx, coinsPerCardType) * coinsPerCardType.per;
+    const coinsPerWonderStage = findAbility(card, "coinsPerWonderStage");
+    if (coinsPerWonderStage)
+        p.coins += countWonderStages(game, playerIdx, coinsPerWonderStage.scope) * coinsPerWonderStage.per;
+    const tradeDiscount = findAbility(card, "tradeDiscount");
+    if (tradeDiscount)
+        p.tradeDiscountReadyTurn[tradeDiscount.category] = game.globalTurn + 1;
+}
 function applyBuild(game, playerIdx, cardId) {
     const p = game.players[playerIdx];
     const card = CARD_BY_ID[cardId];
@@ -311,13 +343,7 @@ function applyBuild(game, playerIdx, cardId) {
     applyPurchases(game, playerIdx, afford.purchases);
     p.built.push(cardId);
     p.hand = p.hand.filter((id) => id !== cardId);
-    p.coins += card.coinsOnPlay || 0;
-    if (card.coinsPerCardType)
-        p.coins += countCardType(game, playerIdx, card.coinsPerCardType) * card.coinsPerCardType.per;
-    if (card.coinsPerWonderStage)
-        p.coins += countWonderStages(game, playerIdx, card.coinsPerWonderStage.scope) * card.coinsPerWonderStage.per;
-    if (card.tradeDiscount)
-        p.tradeDiscountReadyTurn[card.tradeDiscount.category] = game.globalTurn + 1;
+    applyOnBuildEffects(game, playerIdx, card);
     game.log.push(`${p.name} builds ${card.name}.`);
     return { success: true };
 }
@@ -364,13 +390,7 @@ function applyFreeBuildFromHand(game, playerIdx, cardId) {
     p.built.push(cardId);
     p.hand = p.hand.filter((id) => id !== cardId);
     p.freeBuildUsedThisAge = true;
-    p.coins += card.coinsOnPlay || 0;
-    if (card.coinsPerCardType)
-        p.coins += countCardType(game, playerIdx, card.coinsPerCardType) * card.coinsPerCardType.per;
-    if (card.coinsPerWonderStage)
-        p.coins += countWonderStages(game, playerIdx, card.coinsPerWonderStage.scope) * card.coinsPerWonderStage.per;
-    if (card.tradeDiscount)
-        p.tradeDiscountReadyTurn[card.tradeDiscount.category] = game.globalTurn + 1;
+    applyOnBuildEffects(game, playerIdx, card);
     game.log.push(`${p.name} uses their free build to construct ${card.name}.`);
     return { success: true };
 }
@@ -390,13 +410,7 @@ function applyDiscardPileBuild(game, playerIdx, cardId) {
     game.discardPile = game.discardPile.filter((id) => id !== cardId);
     p.built.push(cardId);
     p.discardPileBuildsAvailable -= 1;
-    p.coins += card.coinsOnPlay || 0;
-    if (card.coinsPerCardType)
-        p.coins += countCardType(game, playerIdx, card.coinsPerCardType) * card.coinsPerCardType.per;
-    if (card.coinsPerWonderStage)
-        p.coins += countWonderStages(game, playerIdx, card.coinsPerWonderStage.scope) * card.coinsPerWonderStage.per;
-    if (card.tradeDiscount)
-        p.tradeDiscountReadyTurn[card.tradeDiscount.category] = game.globalTurn + 1;
+    applyOnBuildEffects(game, playerIdx, card);
     game.log.push(`${p.name} reclaims ${card.name} from the discard pile.`);
     return { success: true };
 }
@@ -434,9 +448,12 @@ function getAvailableActionsForCard(game, playerIdx, cardId) {
     };
 }
 // ---- AI ----
+const ECONOMY_ABILITY_KINDS = new Set([
+    "coinsPerCardType", "vpPerCardType", "coinsPerWonderStage", "vpPerWonderStage",
+]);
 function cardHeuristicValue(card) {
     let v = (card.vp || 0) * 2 + (card.shields || 0) * 3 + (card.coinsOnPlay || 0) * 0.5;
-    if (card.science)
+    if (findAbility(card, "science"))
         v += 4;
     if (card.chainTo && card.chainTo.length)
         v += 2;
@@ -444,9 +461,9 @@ function cardHeuristicValue(card) {
         v += 6;
     if (card.produces && card.produces.length)
         v += card.producesChoice ? 2.5 : 1.5;
-    if (card.tradeDiscount)
+    if (findAbility(card, "tradeDiscount"))
         v += 2;
-    if (card.coinsPerCardType || card.vpPerCardType || card.coinsPerWonderStage || card.vpPerWonderStage)
+    if (card.abilities?.some((a) => ECONOMY_ABILITY_KINDS.has(a.kind)))
         v += 3;
     return v;
 }
@@ -612,18 +629,20 @@ function countDefeatTokens(game, playerIdx, scope) {
 }
 function computeCardEndGameVP(game, playerIdx, card) {
     let vp = card.vp || 0;
-    if (card.vpPerCardType)
-        vp += countCardType(game, playerIdx, card.vpPerCardType) * card.vpPerCardType.per;
-    if (card.vpPerWonderStage)
-        vp += countWonderStages(game, playerIdx, card.vpPerWonderStage.scope) * card.vpPerWonderStage.per;
+    const vpPerCardType = findAbility(card, "vpPerCardType");
+    if (vpPerCardType)
+        vp += countCardType(game, playerIdx, vpPerCardType) * vpPerCardType.per;
+    const vpPerWonderStage = findAbility(card, "vpPerWonderStage");
+    if (vpPerWonderStage)
+        vp += countWonderStages(game, playerIdx, vpPerWonderStage.scope) * vpPerWonderStage.per;
     return vp;
 }
 function scienceCounts(game, playerIdx) {
     const tally = { tablet: 0, compass: 0, gear: 0 };
     game.players[playerIdx].built.forEach((id) => {
-        const c = CARD_BY_ID[id];
-        if (c.science)
-            tally[c.science]++;
+        const science = findAbility(CARD_BY_ID[id], "science");
+        if (science)
+            tally[science.symbol]++;
     });
     return tally;
 }
@@ -639,7 +658,7 @@ function computeScienceScore(game, playerIdx) {
     const p = game.players[playerIdx];
     // Scientists Guild plus any built Wonder stage granting the same thing (Babylon A stage 2,
     // Babylon B stage 3). Both are chosen at the end of the game, when points are counted.
-    const specials = p.built.filter((id) => CARD_BY_ID[id].special === "extraScienceSymbol").length +
+    const specials = p.built.filter((id) => findAbility(CARD_BY_ID[id], "extraScienceSymbol")).length +
         powerUses(p, "extraScienceSymbol");
     for (let i = 0; i < specials; i++) {
         let bestKey = null;
@@ -674,9 +693,12 @@ function computeGuildScore(game, playerIdx) {
     const details = [];
     p.built.forEach((id) => {
         const card = CARD_BY_ID[id];
-        if (card.type !== "guild" || !card.guildRule)
+        if (card.type !== "guild")
             return;
-        const s = guildScoreForRule(game, playerIdx, card.guildRule);
+        const rule = guildRuleOf(card);
+        if (!rule)
+            return;
+        const s = guildScoreForRule(game, playerIdx, rule);
         total += s;
         details.push({ card: card.name, vp: s });
     });
@@ -687,9 +709,12 @@ function computeGuildScore(game, playerIdx) {
         [left, right].forEach((nIdx) => {
             game.players[nIdx].built.forEach((id) => {
                 const card = CARD_BY_ID[id];
-                if (card.type !== "guild" || !card.guildRule)
+                if (card.type !== "guild")
                     return;
-                const s = guildScoreForRule(game, playerIdx, card.guildRule);
+                const rule = guildRuleOf(card);
+                if (!rule)
+                    return;
+                const s = guildScoreForRule(game, playerIdx, rule);
                 if (s > best) {
                     best = s;
                     bestName = card.name;
@@ -741,7 +766,7 @@ const GameEngine = {
     aiChooseAction, aiUseBonusPowers, runAiTurns,
     computeMilitaryStrength, resolveMilitary,
     playHumanTurn, advanceAfterHuman, finishTurn,
-    hasPower, powerUses, resolveWonder, neighborsOf,
+    hasPower, powerUses, findAbility, guildRuleOf, resolveWonder, neighborsOf,
     computeFinalScores, computeScienceScore, computeGuildScore, guildScoreForRule,
 };
 if (typeof module !== "undefined" && module.exports)

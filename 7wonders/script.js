@@ -86,9 +86,10 @@ function sceneThumb(sceneKey, label) {
 // detail panel instead, not on every tile at once.
 // Note: all cards show their primary stat only in the header band (repeated icons for multiple production, etc).
 function primaryValueBadge(card) {
-    if (card.type === "scientific" && card.science)
-        return sciIcon(card.science);
-    return null;
+    if (card.type !== "scientific")
+        return null;
+    const science = GameEngine.findAbility(card, "science");
+    return science ? sciIcon(science.symbol) : null;
 }
 // Card band shown for all card types — colored bar at top with the primary stat/resource
 function cardBandHtml(card, game, playerIdx) {
@@ -112,8 +113,9 @@ function cardBandHtml(card, game, playerIdx) {
     }
     else if (card.type === "guild") {
         // Guild cards show calculated VP value based on game state
-        if (game && playerIdx !== undefined && card.guildRule) {
-            const vp = GameEngine.guildScoreForRule(game, playerIdx, card.guildRule);
+        const guildRule = GameEngine.guildRuleOf(card);
+        if (game && playerIdx !== undefined && guildRule) {
+            const vp = GameEngine.guildScoreForRule(game, playerIdx, guildRule);
             content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.vp, "VP")}</span> ${vp}</span>`;
         }
         else {
@@ -123,8 +125,9 @@ function cardBandHtml(card, game, playerIdx) {
     }
     else if (card.type === "scientific") {
         // Science symbol for scientific cards
-        if (card.science) {
-            content = `<span class="band-icon"><span>${sciIcon(card.science)}</span></span>`;
+        const science = GameEngine.findAbility(card, "science");
+        if (science) {
+            content = `<span class="band-icon"><span>${sciIcon(science.symbol)}</span></span>`;
         }
     }
     else if (card.type === "commercial") {
@@ -190,8 +193,9 @@ function cardDetailHtml(game, card) {
             .map((r) => `<span class="icon-badge">${resIcon(r)}${(card.produceCount || 1) > 1 ? `×${card.produceCount}` : ""}</span>`)
             .join(card.producesChoice ? '<span class="label">or</span>' : "")}</div>`
         : "";
-    const scienceBadge = card.science
-        ? `<div class="card-row"><span class="label">Science</span><span class="icon-badge">${sciIcon(card.science)}</span></div>`
+    const scienceAbility = GameEngine.findAbility(card, "science");
+    const scienceBadge = scienceAbility
+        ? `<div class="card-row"><span class="label">Science</span><span class="icon-badge">${sciIcon(scienceAbility.symbol)}</span></div>`
         : "";
     const vpBadge = card.vp
         ? `<div class="card-row"><span class="label">VP</span><span class="icon-badge">${iconImg(GameData.ICONS.vp, "VP")} ${card.vp}</span></div>`

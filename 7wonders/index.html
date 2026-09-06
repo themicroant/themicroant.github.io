@@ -434,6 +434,23 @@ html, body {
 .count-row { display: flex; gap: 10px; }
 .count-btn { flex: 1; }
 .count-btn.selected { background: var(--accent); border-color: var(--accent); color: #17140b; }
+.setup-row { display: flex; align-items: flex-end; gap: 16px; }
+.setup-row-group { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.setup-row-label { font-size: 0.78rem; font-weight: 700; color: var(--accent); }
+.player-count-select {
+  font-family: inherit;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  width: 100%;
+}
+.player-count-select:hover { border-color: var(--accent); }
+.player-count-select:focus { outline: none; border-color: var(--accent); }
 .wonder-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
 .wonder-card {
   background: var(--bg-2);
@@ -458,20 +475,6 @@ html, body {
   width: 100%;
   aspect-ratio: 4 / 3;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background-repeat: no-repeat;
-  background-size: cover;
-  background-position: center;
-}
-/* Title art on the setup screen. Compact to leave room for content below. */
-.setup-hero {
-  display: block;
-  width: 100%;
-  max-width: 280px;
-  height: 140px;
-  margin: 0 auto 12px;
-  aspect-ratio: 2 / 1;
-  border-radius: 10px;
   border: 1px solid var(--border);
   background-repeat: no-repeat;
   background-size: cover;
@@ -562,9 +565,6 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 
 /* Below ~330px the 3-up grid can't fit at a legible width, so it falls back to 2 columns
    (auto-fit does this automatically) — take advantage of the extra room per card. */
-@media (max-width: 480px) {
-  .setup-hero { max-width: 240px; }
-}
 @media (max-width: 330px) {
   .card-emoji { font-size: 2.2rem; }
   .card-name { font-size: 0.95rem; }
@@ -574,6 +574,7 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
   .card-effect { font-size: 0.74rem; }
   .card-chain { font-size: 0.68rem; }
   .status-bar h1 { font-size: 1rem; }
+  .setup-row { flex-direction: column; align-items: stretch; gap: 10px; }
 }
 </style>
 </head>

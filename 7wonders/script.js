@@ -278,7 +278,7 @@ function renderRivalCityModal(game, rivalIdx) {
         .map(([res, count]) => `<span class="icon-badge">${resIcon(res)}×${count}</span>`)
         .join("");
     const choiceResources = prod.choices.length > 0
-        ? prod.choices.map(ch => `<span class="icon-badge" title="${ch.tradeable ? "Choose one each turn" : "Choose one each turn — neighbours cannot buy this"}">${ch.options.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
+        ? prod.choices.map(ch => `<span class="icon-badge" title="${ch.tradeable ? "Choose one each turn" : "Choose one each turn — neighbors cannot buy this"}">${ch.options.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
         : "";
     const resourceDisplay = fixedResources || choiceResources
         ? `<div class="card-row"><span class="label">Resources:</span>${fixedResources}${choiceResources}</div>`
@@ -312,7 +312,7 @@ function renderCityPanel(game) {
         .map(([res, count]) => `<span class="icon-badge">${resIcon(res)}${count}</span>`)
         .join("");
     const choiceResources = prod.choices.length > 0
-        ? prod.choices.map(ch => `<span class="icon-badge" title="${ch.tradeable ? "Choose one each turn" : "Choose one each turn — neighbours cannot buy this"}">${ch.options.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
+        ? prod.choices.map(ch => `<span class="icon-badge" title="${ch.tradeable ? "Choose one each turn" : "Choose one each turn — neighbors cannot buy this"}">${ch.options.map(r => resIcon(r, "0.85em")).join(" or ")}</span>`).join("")
         : "";
     const resourceDisplay = fixedResources || choiceResources
         ? `<div class="card-row"><span class="label">Resources</span>${fixedResources}${choiceResources}</div>`
@@ -466,8 +466,7 @@ function renderWonderDetailModal(wonderId, side) {
         <div class="card-row" style="margin-bottom: 8px;">
           <span class="label">Starting Resource:</span> ${resIcon(wonder.resource)} ${GameData.RESOURCES[wonder.resource].label}
         </div>
-        <p class="wonder-summary">${escapeHtml(face.summary)}</p>
-        <h4 style="margin-bottom: 8px;">Construction Stages (${face.stages.length})</h4>
+        <h4 style="margin-bottom: 8px;">Stages</h4>
         ${stagesHtml}
         <button type="button" class="primary" id="close-wonder-modal" style="margin-top: 12px; width: 100%;">Close</button>
       </div>
@@ -478,14 +477,19 @@ function renderSetup(app) {
     app.innerHTML = `
     <div class="status-bar"><h1>🏛️ 7 Wonders</h1></div>
     <div class="setup-panel">
-      <div class="setup-hero" role="img" aria-label="An ancient harbour city at golden hour" style="background-image:url('${GameData.SCENES.title}');"></div>
-      <h2>Players</h2>
-      <div class="count-row" id="count-row">
-        ${GameData.SUPPORTED_PLAYER_COUNTS.map((n) => `<button type="button" class="count-btn${state.setup.numPlayers === n ? " selected" : ""}" data-count="${n}">${n}</button>`).join("")}
-      </div>
-      <h2>Board side</h2>
-      <div class="count-row" id="side-row">
-        ${["A", "B"].map((sd) => `<button type="button" class="count-btn${state.setup.wonderSide === sd ? " selected" : ""}" data-side="${sd}">${sd}</button>`).join("")}
+      <div class="setup-row">
+        <div class="setup-row-group">
+          <label class="setup-row-label" for="player-count-select">Players</label>
+          <select id="player-count-select" class="player-count-select">
+            ${GameData.SUPPORTED_PLAYER_COUNTS.map((n) => `<option value="${n}"${state.setup.numPlayers === n ? " selected" : ""}>${n}</option>`).join("")}
+          </select>
+        </div>
+        <div class="setup-row-group">
+          <span class="setup-row-label">Board side</span>
+          <div class="count-row" id="side-row">
+            ${["A", "B"].map((sd) => `<button type="button" class="count-btn${state.setup.wonderSide === sd ? " selected" : ""}" data-side="${sd}">${sd}</button>`).join("")}
+          </div>
+        </div>
       </div>
       <p class="setup-hint">${state.setup.wonderSide === "A"
         ? "Side A — the simple faces: mostly victory points, one special power per board."
@@ -498,11 +502,9 @@ function renderSetup(app) {
     </div>
     ${state.setup.detailWonderId ? renderWonderDetailModal(state.setup.detailWonderId, state.setup.wonderSide) : ""}
   `;
-    document.getElementById("count-row").querySelectorAll(".count-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-            state.setup.numPlayers = parseInt(btn.dataset.count, 10);
-            render();
-        });
+    document.getElementById("player-count-select").addEventListener("change", (e) => {
+        state.setup.numPlayers = parseInt(e.target.value, 10);
+        render();
     });
     document.getElementById("side-row").querySelectorAll(".count-btn").forEach((btn) => {
         btn.addEventListener("click", () => {

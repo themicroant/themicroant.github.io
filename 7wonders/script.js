@@ -146,12 +146,21 @@ function cardBandHtml(card, game, playerIdx) {
         }
     }
     else if (card.type === "commercial") {
-        // Coins for commercial cards
+        // Coins for commercial cards. A flat coinsOnPlay is printed on the card, but a
+        // coinsPerCardType/coinsPerWonderStage card (Haven, Vineyard, Bazaar, Lighthouse, Chamber of
+        // Commerce, Ludus, Arena) has no fixed number — its payout depends on the board right now, so
+        // show that computed value (previewOnBuildCoins) instead of a generic placeholder icon.
+        const hasBoardDependentPayout = !!(GameEngine.findAbility(card, "coinsPerCardType") || GameEngine.findAbility(card, "coinsPerWonderStage"));
         if (card.coinsOnPlay) {
             content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.coins, "Coins")}</span> +${card.coinsOnPlay}</span>`;
         }
+        else if (hasBoardDependentPayout && game && playerIdx !== undefined) {
+            const coins = GameEngine.previewOnBuildCoins(game, playerIdx, card);
+            content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.coins, "Coins")}</span> +${coins}</span>`;
+        }
         else {
-            // Passive commercial card - show a subtle indicator
+            // Passive commercial card (trade discount, or a produce-choice card like Caravansery/Forum)
+            // - show a subtle indicator
             content = `<span class="band-icon" style="opacity: 0.6;">🏪</span>`;
         }
     }
@@ -255,8 +264,13 @@ function cardDetailHtml(game, card) {
     const shieldBadge = card.shields
         ? `<div class="card-row"><span class="label">Military</span><span class="icon-badge">${iconImg(GameData.ICONS.shields, "Shields")} ${card.shields}</span></div>`
         : "";
-    const coinBadge = card.coinsOnPlay
-        ? `<div class="card-row"><span class="label">On build</span><span class="icon-badge">${iconImg(GameData.ICONS.coins, "Coins")} +${card.coinsOnPlay}</span></div>`
+    // A flat coinsOnPlay is printed on the card; a coinsPerCardType/coinsPerWonderStage card
+    // (Haven, Vineyard, ...) has no fixed number instead show what it would pay right now.
+    const boardDependentCoins = GameEngine.findAbility(card, "coinsPerCardType") || GameEngine.findAbility(card, "coinsPerWonderStage")
+        ? GameEngine.previewOnBuildCoins(game, 0, card)
+        : 0;
+    const coinBadge = card.coinsOnPlay || boardDependentCoins
+        ? `<div class="card-row"><span class="label">On build</span><span class="icon-badge">${iconImg(GameData.ICONS.coins, "Coins")} +${card.coinsOnPlay || boardDependentCoins}</span></div>`
         : "";
     const costRow = actions.isFreeViaChain
         ? `<div class="card-row"><span class="label">Cost</span><span class="icon-badge">${iconImg(GameData.ICONS.chain, "Chain")} Free</span></div>`
@@ -380,6 +394,20 @@ function cityEffectsHtml(game) {
     </div>
   `;
 }
+// Built structures by name, color-coded by type (same border-left-by-CARD_TYPES-color treatment
+// as the rival-city modal's chips below) but without an emoji per structure — cityEffectsHtml
+// covers the "what does my city do" question; this is just "what did I build", for players who
+// want the list back after the emoji-per-card version was dropped in favor of the effects summary.
+function cityStructuresHtml(me) {
+    const chips = me.built.length
+        ? me.built.map((id) => {
+            const c = GameEngine.CARD_BY_ID[id];
+            const type = GameData.CARD_TYPES[c.type];
+            return `<span class="city-chip" style="border-left: 3px solid ${type.color}">${escapeHtml(c.name)}</span>`;
+        }).join("")
+        : `<span class="city-chip">Nothing built yet</span>`;
+    return `<div class="city-chips">${chips}</div>`;
+}
 function renderCityPanel(game) {
     const me = game.players[0];
     // Show current resources
@@ -393,21 +421,25 @@ function renderCityPanel(game) {
     const resourceDisplay = fixedResources || choiceResources
         ? `<div class="card-row"><span class="label">Resources</span>${fixedResources}${choiceResources}</div>`
         : "";
-    // Every not-yet-built stage's cost, one chip per stage so they read as a single row (wraps on
-    // narrow viewports rather than a stacked list) — not just the next one, so a player can plan
-    // past it (e.g. worth building toward a stage 3 power even though stage 2 alone looks weak).
-    const nextStageIndex = me.wonderStagesBuilt;
-    const remainingStages = me.wonder.stages.slice(nextStageIndex);
-    const futureStagesHtml = remainingStages.length
-        ? `<div class="card-row wonder-future-row"><span class="label">Upcoming stages</span><div class="wonder-future-costs">${remainingStages
-            .map((stage, i) => {
-            const costHtml = Object.entries(stage.cost)
+    // Every stage's cost (not-yet-built ones) and what it gives (all of them — built stages'
+    // effects already happened, but the player asked to see what each stage gives, not just the
+    // future ones), one chip per stage in a single wrapping row. stageEffectCompactHtml renders a
+    // power effect as a "⚡" glyph with the full rule text as a tooltip rather than
+    // wonderStageEffectHtml's full sentence — there's no room for that in a chip this size.
+    const wonderStagesHtml = `
+    <div class="card-row wonder-future-row"><span class="label">Wonder stages</span><div class="wonder-future-costs">${me.wonder.stages
+        .map((stage, i) => {
+        const isBuilt = i < me.wonderStagesBuilt;
+        const costHtml = isBuilt
+            ? ""
+            : `${Object.entries(stage.cost)
                 .map(([res, count]) => `${costIcon(res, "0.85em")}${count > 1 ? count : ""}`)
-                .join(" ");
-            return `<span class="stage-cost-chip"><span class="stage-cost-num">S${nextStageIndex + i + 1}</span>${costHtml || "Free"}</span>`;
-        })
-            .join("")}</div></div>`
-        : "";
+                .join(" ") || "Free"} → `;
+        const effectHtml = stageEffectCompactHtml(stage.effect);
+        return `<span class="stage-cost-chip${isBuilt ? " built" : ""}"><span class="stage-cost-num">${isBuilt ? "✓" : ""}S${i + 1}</span>${costHtml}${effectHtml}</span>`;
+    })
+        .join("")}</div></div>
+  `;
     return `
     <div class="city-panel">
       <div class="panel-head">
@@ -416,13 +448,14 @@ function renderCityPanel(game) {
       </div>
       ${resourceDisplay}
       ${cityEffectsHtml(game)}
+      ${cityStructuresHtml(me)}
       <div class="card-row">
         <span class="label">${me.wonder.name} <span class="wonder-side-tag">Side ${me.wonder.side}</span></span>
         <span class="wonder-progress">
           ${me.wonder.stages.map((_, i) => `<span class="wonder-stage-dot${i < me.wonderStagesBuilt ? " built" : ""}" title="Stage ${i + 1}"></span>`).join("")}
         </span>
       </div>
-      ${futureStagesHtml}
+      ${wonderStagesHtml}
     </div>
   `;
 }
@@ -526,6 +559,22 @@ function wonderStageEffectHtml(effect) {
         ? `<div class="card-row"><span class="label">Effect:</span> ${bits.join(" • ")}</div>`
         : (power ? "" : `<div class="card-row"><span class="label">Effect:</span> —</div>`);
     return `${scoring}${power}`;
+}
+// A compact, inline version of the same effect for the city panel's one-chip-per-stage row
+// (renderCityPanel) — the full sentence wonderStageEffectHtml prints for a power doesn't fit at
+// that size, so it's abbreviated to a "⚡" glyph carrying the rule text as a tooltip instead.
+function stageEffectCompactHtml(effect) {
+    const bits = [];
+    if (effect.vp)
+        bits.push(`${iconImg(GameData.ICONS.vp, "VP", "0.85em")}${effect.vp}`);
+    if (effect.coins)
+        bits.push(`${iconImg(GameData.ICONS.coins, "Coins", "0.85em")}+${effect.coins}`);
+    if (effect.shields)
+        bits.push(`${iconImg(GameData.ICONS.shields, "Shields", "0.85em")}${effect.shields}`);
+    if (effect.power) {
+        bits.push(`<span title="${escapeHtml(GameData.WONDER_POWERS[effect.power] || effect.power)}">⚡</span>`);
+    }
+    return bits.join(" ") || "—";
 }
 function renderWonderDetailModal(wonderId, side) {
     const wonder = GameData.WONDERS.find((w) => w.id === wonderId);

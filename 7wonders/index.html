@@ -437,8 +437,8 @@ html, body {
   background: var(--bg-3); border: 1px solid var(--border);
 }
 .wonder-stage-dot.built { background: var(--accent); border-color: var(--accent); }
-/* All not-yet-built Wonder stages' costs, one chip per stage, in a single wrapping row — see
-   renderCityPanel's futureStagesHtml. */
+/* Every Wonder stage's cost (if not yet built) and effect, one chip per stage, in a single
+   wrapping row — see renderCityPanel's wonderStagesHtml. */
 .wonder-future-row { align-items: flex-start; flex-wrap: wrap; }
 .wonder-future-costs { display: flex; flex-wrap: wrap; gap: 6px; }
 .stage-cost-chip {
@@ -451,6 +451,12 @@ html, body {
   padding: 2px 6px;
   font-size: 0.76rem;
   white-space: nowrap;
+}
+/* A stage already built — its cost isn't shown (already paid), just what it gave; muted so the
+   row reads left-to-right as "done, done, next up, then, then". */
+.stage-cost-chip.built {
+  opacity: 0.6;
+  border-style: dashed;
 }
 .stage-cost-num {
   color: var(--accent);

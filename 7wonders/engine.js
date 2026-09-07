@@ -319,18 +319,42 @@ function effectiveCost(game, playerIdx, card) {
     return freeViaChain ? {} : (card.cost || {});
 }
 // ---- turn actions ----
+// Coins a card's on-build effects (flat coinsOnPlay, or a coinsPerCardType/coinsPerWonderStage
+// ability) pay out, evaluated against the current board state — split out from
+// applyOnBuildEffects so the UI can preview a hand card's *actual* current value (see
+// previewOnBuildCoins below) instead of duplicating this math.
+function computeOnBuildCoins(game, playerIdx, card) {
+    let coins = card.coinsOnPlay || 0;
+    const coinsPerCardType = findAbility(card, "coinsPerCardType");
+    if (coinsPerCardType)
+        coins += countCardType(game, playerIdx, coinsPerCardType) * coinsPerCardType.per;
+    const coinsPerWonderStage = findAbility(card, "coinsPerWonderStage");
+    if (coinsPerWonderStage)
+        coins += countWonderStages(game, playerIdx, coinsPerWonderStage.scope) * coinsPerWonderStage.per;
+    return coins;
+}
+// Preview of what computeOnBuildCoins would pay for a card still in hand — evaluated as if it
+// were already built, since applyBuild adds a card to `built` *before* calling
+// applyOnBuildEffects, so that's what a coinsPerCardType card with `includeSelf` (Chamber of
+// Commerce) actually counts at real build time. Temporarily pushes/pops the card on `built`
+// rather than duplicating that "count including self" logic, so this can never drift from the
+// real payout. Synchronous and single-threaded, so the temporary mutation is never observable.
+function previewOnBuildCoins(game, playerIdx, card) {
+    const p = game.players[playerIdx];
+    const alreadyBuilt = p.built.includes(card.id);
+    if (!alreadyBuilt)
+        p.built.push(card.id);
+    const coins = computeOnBuildCoins(game, playerIdx, card);
+    if (!alreadyBuilt)
+        p.built.pop();
+    return coins;
+}
 // Coin/discount abilities that trigger the moment a card enters play, shared by every "add this
 // card to a player's built city" action (applyBuild, applyFreeBuildFromHand,
 // applyDiscardPileBuild all called this same block inline before it was factored out here).
 function applyOnBuildEffects(game, playerIdx, card) {
     const p = game.players[playerIdx];
-    p.coins += card.coinsOnPlay || 0;
-    const coinsPerCardType = findAbility(card, "coinsPerCardType");
-    if (coinsPerCardType)
-        p.coins += countCardType(game, playerIdx, coinsPerCardType) * coinsPerCardType.per;
-    const coinsPerWonderStage = findAbility(card, "coinsPerWonderStage");
-    if (coinsPerWonderStage)
-        p.coins += countWonderStages(game, playerIdx, coinsPerWonderStage.scope) * coinsPerWonderStage.per;
+    p.coins += computeOnBuildCoins(game, playerIdx, card);
     const tradeDiscount = findAbility(card, "tradeDiscount");
     if (tradeDiscount)
         p.tradeDiscountReadyTurn[tradeDiscount.category] = game.globalTurn + 1;
@@ -780,6 +804,7 @@ const GameEngine = {
     playHumanTurn, advanceAfterHuman, finishTurn,
     hasPower, powerUses, findAbility, guildRuleOf, resolveWonder, neighborsOf,
     computeFinalScores, computeScienceScore, computeGuildScore, guildScoreForRule,
+    previewOnBuildCoins,
 };
 if (typeof module !== "undefined" && module.exports)
     module.exports = GameEngine;

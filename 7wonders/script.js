@@ -628,7 +628,10 @@ function renderSetup(app) {
       <p class="setup-hint">${state.setup.wonderSide === "A"
         ? "Side A — the simple faces: mostly victory points, one special power per board."
         : "Side B — the advanced faces: stronger powers, and stage counts that vary by board."}</p>
-      <h2>Choose your Wonder</h2>
+      <div class="wonder-heading-row">
+        <h2>Choose your Wonder</h2>
+        <button type="button" id="random-wonder-btn">🎲 Random</button>
+      </div>
       <div class="wonder-grid" id="wonder-grid">
         ${GameData.WONDERS.map((w) => renderWonderCard(w, state.setup.wonderSide, w.id === state.setup.wonderId)).join("")}
       </div>
@@ -656,6 +659,16 @@ function renderSetup(app) {
             state.setup.detailWonderId = btn.dataset.wonder;
             render();
         });
+    });
+    // Random board + side in one click — reuses GameEngine.shuffle rather than a bespoke
+    // Math.random() pick, same utility the deck-building code already relies on. Also opens the
+    // detail sheet, matching a manual pick's behavior, so the player immediately sees what they got.
+    document.getElementById("random-wonder-btn").addEventListener("click", () => {
+        const board = GameEngine.shuffle(GameData.WONDERS)[0];
+        state.setup.wonderSide = GameEngine.shuffle(["A", "B"])[0];
+        state.setup.wonderId = board.id;
+        state.setup.detailWonderId = board.id;
+        render();
     });
     const closeDetail = () => { state.setup.detailWonderId = null; render(); };
     document.getElementById("close-wonder-modal")?.addEventListener("click", closeDetail);

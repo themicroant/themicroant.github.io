@@ -22,8 +22,12 @@ function escapeHtml(str) {
     div.textContent = str;
     return div.innerHTML;
 }
+// chainFrom/chainTo list every duplicate-copy id of a chained card (e.g. "baths" AND "baths-2"),
+// since building any copy satisfies/unlocks the chain — but that would print "Baths, Baths 2" if
+// shown as-is, so this strips the "-2"/"-3" copy suffix and dedupes before formatting names.
 function formatChainList(ids) {
-    return ids
+    const names = [...new Set(ids.map((id) => id.replace(/-\d+$/, "")))];
+    return names
         .map((id) => id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))
         .join(", ");
 }
@@ -65,10 +69,12 @@ function cardArtUrl(card) {
         hash = (hash * 31 + card.id.charCodeAt(i)) >>> 0;
     return pool[hash % pool.length];
 }
-// Get the image path for a card. Cards with CARD_IMAGES entries use those; otherwise fall back
-// to the shared CARD_ART pool hashed by card id.
+// Get the image path for a card. Cards with CARD_IMAGES entries use those directly; a duplicate
+// copy of a card (game-data.ts's CARDS — same name/art, different id suffix for a second/third
+// copy dealt at a higher player count, e.g. "stone-pit-2") falls back to its un-suffixed base id's
+// image, since it's the same illustration; failing that, the shared CARD_ART pool hashed by id.
 function cardImagePath(card) {
-    const img = GameData.CARD_IMAGES[card.id];
+    const img = GameData.CARD_IMAGES[card.id] || GameData.CARD_IMAGES[card.id.replace(/-\d+$/, "")];
     return img ? img : cardArtUrl(card);
 }
 // A card's face art: use the individual card image if it exists, otherwise the shared CARD_ART pool.

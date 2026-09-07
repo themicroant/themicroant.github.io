@@ -66,10 +66,10 @@ function hasPower(player, powerName) {
 function findAbility(card, kind) {
     return card.abilities?.find((a) => a.kind === kind);
 }
-// Guild scoring rules are 4 of CardAbility's kinds at once (see GuildRule in src/types.d.ts), so
-// there's no single `kind` to hand findAbility — this checks for any of the four.
+// Guild scoring rules are 5 of CardAbility's kinds at once (see GuildRule in src/types.d.ts), so
+// there's no single `kind` to hand findAbility — this checks for any of the five.
 const GUILD_RULE_KINDS = new Set([
-    "countCardType", "countCardTypes", "countWonderStages", "countDefeatTokens",
+    "countCardType", "countCardTypes", "countWonderStages", "countDefeatTokens", "wonderCompleteBonus",
 ]);
 function guildRuleOf(card) {
     return card.abilities?.find((a) => GUILD_RULE_KINDS.has(a.kind));
@@ -274,16 +274,20 @@ function tradeUnitCost(game, playerIdx, resource) {
 // neighbor's production is treated as purchasable.
 function canAffordWithCommerce(game, playerIdx, cost) {
     const p = game.players[playerIdx];
+    const flatCoins = cost.coins || 0;
     const production = computeProduction(game, playerIdx);
     const { shortfall } = solveCost(production, cost);
-    if (Object.keys(shortfall).length === 0)
-        return { ok: true, coinsNeeded: 0, purchases: [] };
+    if (Object.keys(shortfall).length === 0) {
+        if (p.coins < flatCoins)
+            return { ok: false };
+        return { ok: true, coinsNeeded: flatCoins, purchases: [] };
+    }
     const { left, right } = neighborsOf(game, playerIdx);
     const leftProd = computeProduction(game, left);
     const rightProd = computeProduction(game, right);
     const canSupply = (prod, resource) => (prod.fixed[resource] || 0) > 0 ||
         prod.choices.some((ch) => ch.tradeable && ch.options.includes(resource));
-    let coinsNeeded = 0;
+    let coinsNeeded = flatCoins;
     const purchases = [];
     for (const [resource, count] of Object.entries(shortfall)) {
         const leftOk = canSupply(leftProd, resource);
@@ -341,6 +345,7 @@ function applyBuild(game, playerIdx, cardId) {
     if (!afford.ok)
         return { success: false, reason: "cannot-afford" };
     applyPurchases(game, playerIdx, afford.purchases);
+    p.coins -= cost.coins || 0; // flat coin cost is paid to the bank, not a neighbor purchase
     p.built.push(cardId);
     p.hand = p.hand.filter((id) => id !== cardId);
     applyOnBuildEffects(game, playerIdx, card);
@@ -358,6 +363,7 @@ function applyWonderStage(game, playerIdx, cardId) {
     if (!afford.ok)
         return { success: false, reason: "cannot-afford" };
     applyPurchases(game, playerIdx, afford.purchases);
+    p.coins -= stage.cost.coins || 0; // flat coin cost is paid to the bank, not a neighbor purchase
     p.hand = p.hand.filter((id) => id !== cardId);
     p.wonderStagesBuilt += 1;
     p.coins += stage.effect.coins || 0;
@@ -682,6 +688,12 @@ function guildScoreForRule(game, evalPlayerIdx, rule) {
         case "countCardTypes": return countCardTypes(game, evalPlayerIdx, rule) * rule.per;
         case "countWonderStages": return countWonderStages(game, evalPlayerIdx, rule.scope) * rule.per;
         case "countDefeatTokens": return countDefeatTokens(game, evalPlayerIdx, rule.scope) * rule.per;
+        // Decorators Guild: flat bonus, not a per-item count — always evaluated against the Guild's
+        // own owner (`evalPlayerIdx`), never a neighbor, since it reads that player's own Wonder.
+        case "wonderCompleteBonus": {
+            const p = game.players[evalPlayerIdx];
+            return p.wonderStagesBuilt >= p.wonder.stages.length ? rule.vp : 0;
+        }
         default: return 0;
     }
 }

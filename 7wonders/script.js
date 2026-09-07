@@ -23,13 +23,22 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 // chainFrom/chainTo list every duplicate-copy id of a chained card (e.g. "baths" AND "baths-2"),
-// since building any copy satisfies/unlocks the chain — but that would print "Baths, Baths 2" if
-// shown as-is, so this strips the "-2"/"-3" copy suffix and dedupes before formatting names.
+// since building any copy satisfies/unlocks the chain. This collapses that down to one id per
+// distinct chained card (its un-suffixed base id, which is always itself a valid CARD_BY_ID key —
+// see game-data.ts's CARDS comment on the copy-suffix id scheme) — shared by formatChainList
+// (names only) and chainTargetCards (full Card objects, for the detail-panel preview below).
+function uniqueChainBaseIds(ids) {
+    return [...new Set(ids.map((id) => id.replace(/-\d+$/, "")))];
+}
 function formatChainList(ids) {
-    const names = [...new Set(ids.map((id) => id.replace(/-\d+$/, "")))];
-    return names
+    return uniqueChainBaseIds(ids)
         .map((id) => id.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))
         .join(", ");
+}
+function chainTargetCards(ids) {
+    return uniqueChainBaseIds(ids)
+        .map((id) => GameEngine.CARD_BY_ID[id])
+        .filter((c) => !!c);
 }
 function costEntries(cost) {
     return Object.entries(cost || {}).map(([key, count]) => ({ key: key, count: count }));
@@ -187,6 +196,43 @@ function renderCard(game, card, isSelected, isTabbable) {
     </button>
   `;
 }
+// A compact preview of one chained-to card — cost, its main stat badges (produce/science/VP/
+// shields/coins, same fields cardDetailHtml shows for the selected card itself, just packed into
+// one row instead of separate labeled rows) and its effect text. Lets a player judge whether a
+// chain is worth pursuing (e.g. is Aqueduct's cost/VP good enough to justify building Baths for
+// it) without leaving the current card's detail view to go look it up.
+function chainCardPreviewHtml(card) {
+    const cost = costEntries(card.cost);
+    const costBadges = cost.length
+        ? cost.map((c) => `<span class="icon-badge">${costIcon(c.key)} ${c.count}</span>`).join("")
+        : `<span class="icon-badge">Free</span>`;
+    const scienceAbility = GameEngine.findAbility(card, "science");
+    const statBadges = [
+        card.produces.length
+            ? card.produces
+                .map((r) => `<span class="icon-badge">${resIcon(r)}${(card.produceCount || 1) > 1 ? `×${card.produceCount}` : ""}</span>`)
+                .join(card.producesChoice ? '<span class="label">or</span>' : "")
+            : "",
+        scienceAbility ? `<span class="icon-badge">${sciIcon(scienceAbility.symbol)}</span>` : "",
+        card.vp ? `<span class="icon-badge">${iconImg(GameData.ICONS.vp, "VP")} ${card.vp}</span>` : "",
+        card.shields ? `<span class="icon-badge">${iconImg(GameData.ICONS.shields, "Shields")} ${card.shields}</span>` : "",
+        card.coinsOnPlay ? `<span class="icon-badge">${iconImg(GameData.ICONS.coins, "Coins")} +${card.coinsOnPlay}</span>` : "",
+    ].join("");
+    return `
+    <div class="chain-preview-card">
+      <div class="chain-preview-head">${card.emoji} <strong>${escapeHtml(card.name)}</strong></div>
+      <div class="chain-preview-stats">${costBadges}${statBadges}</div>
+      <div class="chain-preview-effect">${escapeHtml(card.effect)}</div>
+    </div>
+  `;
+}
+// Wraps one preview per distinct card `ids` chains to/from (chainTargetCards already collapses
+// duplicate-copy ids down to one entry per real card — e.g. Apothecary's chainTo lists both
+// Stables and Dispensary, not each's own duplicate copies).
+function chainPreviewHtml(ids) {
+    const cards = chainTargetCards(ids);
+    return cards.length ? `<div class="chain-preview">${cards.map(chainCardPreviewHtml).join("")}</div>` : "";
+}
 // Full detail for the currently-selected card — cost breakdown, produce/VP/shields/science/coin
 // badges, effect text, chain hints — shown once, in the action bar, rather than crammed onto
 // every tile in the hand at once (see renderCard above).
@@ -217,8 +263,12 @@ function cardDetailHtml(game, card) {
         : `<div class="card-row"><span class="label">Cost</span>${cost.length
             ? cost.map((c) => `<span class="icon-badge">${costIcon(c.key)} ${c.count}</span>`).join("")
             : `<span class="icon-badge">Free</span>`}${!actions.canBuild ? '<span class="lock-badge" title="Cannot currently afford">🔒</span>' : ""}</div>`;
+    // Unlocks free: shows the next card(s) in the chain in full (chainPreviewHtml), so the player
+    // can judge whether it's worth building this one for the chain rather than just seeing a name.
+    // Free via (this card was itself unlocked by a chain) only shows names — there's no "next card"
+    // to preview looking backward, and the precursor is presumably already visible in the city.
     const chainRow = card.chainTo.length
-        ? `<div class="card-chain">${iconImg(GameData.ICONS.chain, "Chain")} Unlocks free: ${escapeHtml(formatChainList(card.chainTo))}</div>`
+        ? `<div class="card-chain">${iconImg(GameData.ICONS.chain, "Chain")} Unlocks free: ${escapeHtml(formatChainList(card.chainTo))}</div>${chainPreviewHtml(card.chainTo)}`
         : card.chainFrom.length
             ? `<div class="card-chain">${iconImg(GameData.ICONS.chain, "Chain")} Free via: ${escapeHtml(formatChainList(card.chainFrom))}</div>`
             : "";
@@ -307,11 +357,31 @@ function renderRivalCityModal(game, rivalIdx) {
     </div>
   `;
 }
+// Aggregates built cards' *ongoing* effects — military strength and science symbol counts —
+// rather than listing each structure with its own emoji (renderCityPanel used to). One-time
+// coin gains (coinsOnPlay, coinsPerCardType, ...) are deliberately left out: that coin already
+// landed in the treasury when the card was built, it isn't a running total like these are.
+function cityEffectsHtml(game) {
+    const me = game.players[0];
+    const shields = GameEngine.computeMilitaryStrength(game, 0);
+    const scienceTally = { tablet: 0, compass: 0, gear: 0 };
+    me.built.forEach((id) => {
+        const ability = GameEngine.findAbility(GameEngine.CARD_BY_ID[id], "science");
+        if (ability)
+            scienceTally[ability.symbol]++;
+    });
+    return `
+    <div class="card-row city-effects">
+      <span class="label">Effects</span>
+      <span class="icon-badge" title="Military strength">${iconImg(GameData.ICONS.shields, "Shields")} ${shields}</span>
+      <span class="icon-badge" title="Tablet science symbols">${sciIcon("tablet")} ${scienceTally.tablet}</span>
+      <span class="icon-badge" title="Compass science symbols">${sciIcon("compass")} ${scienceTally.compass}</span>
+      <span class="icon-badge" title="Gear science symbols">${sciIcon("gear")} ${scienceTally.gear}</span>
+    </div>
+  `;
+}
 function renderCityPanel(game) {
     const me = game.players[0];
-    const chips = me.built.length
-        ? me.built.map((id) => { const c = GameEngine.CARD_BY_ID[id]; return `<span class="city-chip">${c.emoji} ${escapeHtml(c.name)}</span>`; }).join("")
-        : `<span class="city-chip">Nothing built yet</span>`;
     // Show current resources
     const prod = GameEngine.computeProduction(game, 0);
     const fixedResources = Object.entries(prod.fixed)
@@ -323,12 +393,21 @@ function renderCityPanel(game) {
     const resourceDisplay = fixedResources || choiceResources
         ? `<div class="card-row"><span class="label">Resources</span>${fixedResources}${choiceResources}</div>`
         : "";
-    // Show next wonder stage cost if available
+    // Every not-yet-built stage's cost, one chip per stage so they read as a single row (wraps on
+    // narrow viewports rather than a stacked list) — not just the next one, so a player can plan
+    // past it (e.g. worth building toward a stage 3 power even though stage 2 alone looks weak).
     const nextStageIndex = me.wonderStagesBuilt;
-    const nextStage = nextStageIndex < me.wonder.stages.length ? me.wonder.stages[nextStageIndex] : null;
-    const nextStageCost = nextStage
-        ? Object.entries(nextStage.cost).map(([res, count]) => `${costIcon(res)}${count > 1 ? count : ""}`).join(" ")
-        : "Complete";
+    const remainingStages = me.wonder.stages.slice(nextStageIndex);
+    const futureStagesHtml = remainingStages.length
+        ? `<div class="card-row wonder-future-row"><span class="label">Upcoming stages</span><div class="wonder-future-costs">${remainingStages
+            .map((stage, i) => {
+            const costHtml = Object.entries(stage.cost)
+                .map(([res, count]) => `${costIcon(res, "0.85em")}${count > 1 ? count : ""}`)
+                .join(" ");
+            return `<span class="stage-cost-chip"><span class="stage-cost-num">S${nextStageIndex + i + 1}</span>${costHtml || "Free"}</span>`;
+        })
+            .join("")}</div></div>`
+        : "";
     return `
     <div class="city-panel">
       <div class="panel-head">
@@ -336,14 +415,14 @@ function renderCityPanel(game) {
         <h3>🏙️ Your City — ${me.built.length} structures</h3>
       </div>
       ${resourceDisplay}
-      <div class="city-chips">${chips}</div>
+      ${cityEffectsHtml(game)}
       <div class="card-row">
         <span class="label">${me.wonder.name} <span class="wonder-side-tag">Side ${me.wonder.side}</span></span>
         <span class="wonder-progress">
           ${me.wonder.stages.map((_, i) => `<span class="wonder-stage-dot${i < me.wonderStagesBuilt ? " built" : ""}" title="Stage ${i + 1}"></span>`).join("")}
         </span>
       </div>
-      ${nextStage ? `<div class="card-row"><span class="label">Next stage needs</span>${nextStageCost}</div>` : ""}
+      ${futureStagesHtml}
     </div>
   `;
 }

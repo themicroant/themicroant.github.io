@@ -74,6 +74,16 @@ const GUILD_RULE_KINDS = new Set([
 function guildRuleOf(card) {
     return card.abilities?.find((a) => GUILD_RULE_KINDS.has(a.kind));
 }
+// "You may never build 2 identical structures" (docs/rules.md). Matched by name rather than by
+// exact card id: a higher-player-count deck deals extra physical copies of some cards (e.g.
+// west-trading-post / west-trading-post-2) that share one printed name — having built either
+// copy forecloses building any other copy, or the other player-count's copy, of the same
+// structure. The single check every build path (applyBuild, applyFreeBuildFromHand,
+// applyDiscardPileBuild, getAvailableActionsForCard) goes through, rather than each reimplementing
+// the id-vs-name distinction.
+function hasBuiltSameName(game, playerIdx, card) {
+    return game.players[playerIdx].built.some((id) => CARD_BY_ID[id].name === card.name);
+}
 // Resolves a board + side ("A" | "B") into the flat per-player Wonder object the rest of the
 // engine reads: the board's identity plus just the chosen face's stage list. Stage counts differ
 // per side (Rhodos B has 2, Gizah B has 4), so nothing may assume 3.
@@ -364,6 +374,8 @@ function applyBuild(game, playerIdx, cardId) {
     const card = CARD_BY_ID[cardId];
     if (!p.hand.includes(cardId))
         return { success: false, reason: "not-in-hand" };
+    if (hasBuiltSameName(game, playerIdx, card))
+        return { success: false, reason: "duplicate-structure" };
     const cost = effectiveCost(game, playerIdx, card);
     const afford = canAffordWithCommerce(game, playerIdx, cost);
     if (!afford.ok)
@@ -417,6 +429,8 @@ function applyFreeBuildFromHand(game, playerIdx, cardId) {
     if (!p.hand.includes(cardId))
         return { success: false, reason: "not-in-hand" };
     const card = CARD_BY_ID[cardId];
+    if (hasBuiltSameName(game, playerIdx, card))
+        return { success: false, reason: "duplicate-structure" };
     p.built.push(cardId);
     p.hand = p.hand.filter((id) => id !== cardId);
     p.freeBuildUsedThisAge = true;
@@ -427,16 +441,17 @@ function applyFreeBuildFromHand(game, playerIdx, cardId) {
 // Halikarnassos' power: reclaim any card discarded since the start of the game and build it for
 // free. One use is banked per built stage carrying the power (side A grants one, side B three),
 // spent at any later point; it is a bonus action, independent of the hand-card turn action.
-// A card already in the player's city can't be built twice, per the no-duplicates rule.
+// hasBuiltSameName below covers the no-duplicate-structures rule (also catches reclaiming a
+// second physical copy of a card whose name is already built).
 function applyDiscardPileBuild(game, playerIdx, cardId) {
     const p = game.players[playerIdx];
     if (p.discardPileBuildsAvailable <= 0)
         return { success: false, reason: "power-unavailable" };
     if (!game.discardPile.includes(cardId))
         return { success: false, reason: "not-in-discard" };
-    if (p.built.includes(cardId))
-        return { success: false, reason: "already-built" };
     const card = CARD_BY_ID[cardId];
+    if (hasBuiltSameName(game, playerIdx, card))
+        return { success: false, reason: "duplicate-structure" };
     game.discardPile = game.discardPile.filter((id) => id !== cardId);
     p.built.push(cardId);
     p.discardPileBuildsAvailable -= 1;
@@ -460,6 +475,7 @@ function applyAction(game, playerIdx, action, cardId) {
 function getAvailableActionsForCard(game, playerIdx, cardId) {
     const p = game.players[playerIdx];
     const card = CARD_BY_ID[cardId];
+    const alreadyBuilt = hasBuiltSameName(game, playerIdx, card);
     const cost = effectiveCost(game, playerIdx, card);
     const buildAfford = canAffordWithCommerce(game, playerIdx, cost);
     const wonderNextStage = p.wonderStagesBuilt < p.wonder.stages.length ? p.wonder.stages[p.wonderStagesBuilt] : null;
@@ -467,7 +483,8 @@ function getAvailableActionsForCard(game, playerIdx, cardId) {
         ? canAffordWithCommerce(game, playerIdx, wonderNextStage.cost)
         : { ok: false };
     return {
-        canBuild: buildAfford.ok,
+        canBuild: buildAfford.ok && !alreadyBuilt,
+        alreadyBuilt,
         buildCoinsNeeded: buildAfford.coinsNeeded || 0,
         isFreeViaChain: Object.keys(cost).length === 0 && Object.keys(card.cost || {}).length > 0,
         canWonder: !!wonderNextStage && wonderAfford.ok,
@@ -509,6 +526,8 @@ function aiChooseAction(game, playerIdx) {
         best = candidate; };
     p.hand.forEach((cardId) => {
         const card = CARD_BY_ID[cardId];
+        if (hasBuiltSameName(game, playerIdx, card))
+            return; // no duplicate structures — see hasBuiltSameName
         const cost = effectiveCost(game, playerIdx, card);
         const afford = canAffordWithCommerce(game, playerIdx, cost);
         if (afford.ok)
@@ -532,7 +551,12 @@ function aiChooseAction(game, playerIdx) {
 function aiUseBonusPowers(game, playerIdx) {
     const p = game.players[playerIdx];
     if (hasPower(p, "freeBuildPerAge") && !p.freeBuildUsedThisAge && p.hand.length) {
-        const buildable = p.hand.filter((id) => !getAvailableActionsForCard(game, playerIdx, id).canBuild);
+        // Only cards blocked by affordability are worth spending the free build on — one blocked by
+        // the no-duplicate-structures rule instead would just have applyFreeBuildFromHand reject it.
+        const buildable = p.hand.filter((id) => {
+            const card = CARD_BY_ID[id];
+            return !hasBuiltSameName(game, playerIdx, card) && !getAvailableActionsForCard(game, playerIdx, id).canBuild;
+        });
         if (buildable.length) {
             const best = buildable.slice().sort((a, b) => cardHeuristicValue(CARD_BY_ID[b]) - cardHeuristicValue(CARD_BY_ID[a]))[0];
             applyFreeBuildFromHand(game, playerIdx, best);
@@ -540,7 +564,7 @@ function aiUseBonusPowers(game, playerIdx) {
     }
     // Charge-based, so spend them in a loop: Halikarnassos B can be sitting on three at once.
     while (p.discardPileBuildsAvailable > 0) {
-        const candidates = game.discardPile.filter((id) => !p.built.includes(id));
+        const candidates = game.discardPile.filter((id) => !hasBuiltSameName(game, playerIdx, CARD_BY_ID[id]));
         if (!candidates.length)
             break;
         const best = candidates.sort((a, b) => cardHeuristicValue(CARD_BY_ID[b]) - cardHeuristicValue(CARD_BY_ID[a]))[0];
@@ -802,7 +826,7 @@ const GameEngine = {
     aiChooseAction, aiUseBonusPowers, runAiTurns,
     computeMilitaryStrength, resolveMilitary,
     playHumanTurn, advanceAfterHuman, finishTurn,
-    hasPower, powerUses, findAbility, guildRuleOf, resolveWonder, neighborsOf,
+    hasPower, powerUses, hasBuiltSameName, findAbility, guildRuleOf, resolveWonder, neighborsOf,
     computeFinalScores, computeScienceScore, computeGuildScore, guildScoreForRule,
     previewOnBuildCoins,
 };

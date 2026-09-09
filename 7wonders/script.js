@@ -151,16 +151,38 @@ function cardBandHtml(card, game, playerIdx) {
         // Commerce, Ludus, Arena) has no fixed number — its payout depends on the board right now, so
         // show that computed value (previewOnBuildCoins) instead of a generic placeholder icon.
         const hasBoardDependentPayout = !!(GameEngine.findAbility(card, "coinsPerCardType") || GameEngine.findAbility(card, "coinsPerWonderStage"));
-        if (card.coinsOnPlay) {
+        const tradeAbility = GameEngine.findAbility(card, "tradeDiscount");
+        if (card.produces && card.produces.length) {
+            // Produce-choice commercial cards (Caravansery, Forum) actually produce resources — show
+            // that the same way basic/manufactured cards do, rather than falling into the generic
+            // trade-post look below (they carry no tradeDiscount ability, only West/East Trading Post
+            // and Marketplace do).
+            const icons = card.produces.map((r) => {
+                const icon = resIcon(r);
+                const count = card.produceCount || 1;
+                return Array(count).fill(`<span class="band-icon"><span>${icon}</span></span>`).join("");
+            }).join(card.producesChoice ? '<span class="band-separator">•</span>' : "");
+            content = icons;
+        }
+        else if (card.coinsOnPlay) {
             content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.coins, "Coins")}</span> +${card.coinsOnPlay}</span>`;
         }
         else if (hasBoardDependentPayout && game && playerIdx !== undefined) {
             const coins = GameEngine.previewOnBuildCoins(game, playerIdx, card);
             content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.coins, "Coins")}</span> +${coins}</span>`;
         }
+        else if (tradeAbility) {
+            // West/East Trading Post and Marketplace: no coin payout, just a standing discount on
+            // buying from a neighbor. A single shared shop emoji couldn't tell these apart, so show
+            // which neighbor(s) it discounts (arrow) and the discounted price (coin), with the exact
+            // goods and neighbor spelled out in the tooltip.
+            const arrow = tradeAbility.neighbor === "left" ? "◀" : tradeAbility.neighbor === "right" ? "▶" : "⇄";
+            const neighborLabel = tradeAbility.neighbor === "left" ? "your left neighbor" : tradeAbility.neighbor === "right" ? "your right neighbor" : "either neighbor";
+            const goodsLabel = tradeAbility.category === "basic" ? "Raw Materials" : "Manufactured Goods";
+            content = `<span class="band-icon trade-discount-icon" title="Buy ${goodsLabel} from ${neighborLabel} for 1 coin instead of 2"><span style="font-size: 1.3rem; line-height: 1;">${arrow}</span> ${iconImg(GameData.ICONS.coins, "Coins", "0.8em")}1</span>`;
+        }
         else {
-            // Passive commercial card (trade discount, or a produce-choice card like Caravansery/Forum)
-            // - show a subtle indicator
+            // Fallback for any other passive commercial card with no coin payout and no trade ability.
             content = `<span class="band-icon" style="opacity: 0.6;">🏪</span>`;
         }
     }
@@ -198,7 +220,7 @@ function renderCard(game, card, isSelected, isTabbable) {
       ${cardBandHtml(card, game, 0)}
       <div class="card-art" style="${cardArtStyle(card)}">
         ${!GameData.CARD_IMAGES[card.id] ? `<div class="card-emoji-badge">${card.emoji}</div>` : ""}
-        ${!actions.canBuild ? '<div class="card-lock-badge" title="Cannot currently afford">🔒</div>' : ""}
+        ${!actions.canBuild ? `<div class="card-lock-badge" title="${actions.alreadyBuilt ? "You already built this structure" : "Cannot currently afford"}">${actions.alreadyBuilt ? "🚫" : "🔒"}</div>` : ""}
         ${costLabel ? `<div class="card-cost-pill">${costLabel}</div>` : ""}
         ${value ? `<div class="card-value-badge">${value}</div>` : ""}
       </div>
@@ -272,11 +294,17 @@ function cardDetailHtml(game, card) {
     const coinBadge = card.coinsOnPlay || boardDependentCoins
         ? `<div class="card-row"><span class="label">On build</span><span class="icon-badge">${iconImg(GameData.ICONS.coins, "Coins")} +${card.coinsOnPlay || boardDependentCoins}</span></div>`
         : "";
+    // "You may never build 2 identical structures" (docs/rules.md) — called out on its own row
+    // rather than folded into the cost row, since it's not an affordability problem at all: no
+    // amount of coins or trading fixes it.
+    const alreadyBuiltRow = actions.alreadyBuilt
+        ? `<div class="card-row already-built-row">🚫 You already built a ${escapeHtml(card.name)}</div>`
+        : "";
     const costRow = actions.isFreeViaChain
         ? `<div class="card-row"><span class="label">Cost</span><span class="icon-badge">${iconImg(GameData.ICONS.chain, "Chain")} Free</span></div>`
         : `<div class="card-row"><span class="label">Cost</span>${cost.length
             ? cost.map((c) => `<span class="icon-badge">${costIcon(c.key)} ${c.count}</span>`).join("")
-            : `<span class="icon-badge">Free</span>`}${!actions.canBuild ? '<span class="lock-badge" title="Cannot currently afford">🔒</span>' : ""}</div>`;
+            : `<span class="icon-badge">Free</span>`}${!actions.canBuild && !actions.alreadyBuilt ? '<span class="lock-badge" title="Cannot currently afford">🔒</span>' : ""}</div>`;
     // Unlocks free: shows the next card(s) in the chain in full (chainPreviewHtml), so the player
     // can judge whether it's worth building this one for the chain rather than just seeing a name.
     // Free via (this card was itself unlocked by a chain) only shows names — there's no "next card"
@@ -289,6 +317,7 @@ function cardDetailHtml(game, card) {
     return `
     <div class="selected-detail">
       <div class="selected-title">${card.emoji} <strong>${escapeHtml(card.name)}</strong> <span class="selected-type">${type.label}</span></div>
+      ${alreadyBuiltRow}
       ${costRow}
       ${produceBadges}
       ${scienceBadge}
@@ -335,6 +364,16 @@ function renderRivalsStrip(game) {
         .join("");
     return `<div class="rivals-strip">${chips}</div>`;
 }
+// Opens the city modal (renderRivalCityModal below) for any player — used by both the rival strip
+// on the hand screen and the clickable score rows on the final-score screen, since the modal
+// itself only ever reads game.players[idx] and doesn't care whether that idx is player 0 or a
+// rival.
+function openCityModal(app, game, playerIdx) {
+    app.appendChild(new DOMParser().parseFromString(renderRivalCityModal(game, playerIdx), "text/html").body.firstChild);
+    document.getElementById("close-rival-modal").addEventListener("click", () => {
+        document.getElementById("rival-modal").remove();
+    });
+}
 function renderRivalCityModal(game, rivalIdx) {
     const rival = game.players[rivalIdx];
     const cards = rival.built.map((id) => {
@@ -356,7 +395,7 @@ function renderRivalCityModal(game, rivalIdx) {
     return `
     <div class="modal-overlay" id="rival-modal">
       <div class="modal-panel">
-        <h3>${rival.wonder.emoji} ${escapeHtml(rival.name)}'s City</h3>
+        <h3>${rival.wonder.emoji} ${rivalIdx === 0 ? "Your City" : `${escapeHtml(rival.name)}'s City`}</h3>
         <div class="card-row">
           <span class="label">Wonder:</span> ${rival.wonder.name} (Stage ${rival.wonderStagesBuilt}/${rival.wonder.stages.length})
         </div>
@@ -493,11 +532,13 @@ function renderDiscardModal(game) {
 }
 function renderActionBar(game, card) {
     const actions = GameEngine.getAvailableActionsForCard(game, 0, card.id);
-    const buildSub = actions.isFreeViaChain
-        ? "Free (chain unlock)"
-        : actions.canBuild
-            ? (actions.buildCoinsNeeded ? `Own + buy for ${actions.buildCoinsNeeded}${iconImg(GameData.ICONS.coins, "coins", "0.95em")}` : "From own production")
-            : "Cannot afford";
+    const buildSub = actions.alreadyBuilt
+        ? "Already built"
+        : actions.isFreeViaChain
+            ? "Free (chain unlock)"
+            : actions.canBuild
+                ? (actions.buildCoinsNeeded ? `Own + buy for ${actions.buildCoinsNeeded}${iconImg(GameData.ICONS.coins, "coins", "0.95em")}` : "From own production")
+                : "Cannot afford";
     const wonderSub = game.players[0].wonderStagesBuilt >= game.players[0].wonder.stages.length
         ? "Wonder complete"
         : actions.canWonder
@@ -763,11 +804,7 @@ function renderHand(app, opts = {}) {
     });
     document.querySelectorAll(".rival-chip").forEach((chip) => {
         chip.addEventListener("click", () => {
-            const rivalIdx = parseInt(chip.dataset.rivalId, 10);
-            app.appendChild(new DOMParser().parseFromString(renderRivalCityModal(game, rivalIdx), "text/html").body.firstChild);
-            document.getElementById("close-rival-modal").addEventListener("click", () => {
-                document.getElementById("rival-modal").remove();
-            });
+            openCityModal(app, game, parseInt(chip.dataset.rivalId, 10));
         });
     });
     document.getElementById("power-freebuild")?.addEventListener("click", () => {
@@ -884,7 +921,7 @@ function renderGameEnd(app) {
     const winner = scores[0];
     const rows = scores
         .map((s, rank) => `
-      <tr class="${rank === 0 ? "winner" : ""}">
+      <tr class="score-row${rank === 0 ? " winner" : ""}" data-player-idx="${s.playerIdx}" tabindex="0" role="button" title="Click to view ${s.playerIdx === 0 ? "your" : `${escapeHtml(s.name)}'s`} structures">
         <td>
           ${rank === 0 ? iconImg(GameData.ICONS.vp, "Winner") + " " : ""}${escapeHtml(s.name)}
           <div class="score-wonder">${escapeHtml(s.wonderName)} ${s.wonderSide} · ${s.wonderStagesBuilt}/${GameEngine.WONDER_BY_ID[s.wonderId].sides[s.wonderSide].stages.length}</div>
@@ -918,6 +955,16 @@ function renderGameEnd(app) {
         state.selectedCardId = null;
         state.setup = { numPlayers: 4, wonderId: null, wonderSide: "A", detailWonderId: null };
         render();
+    });
+    document.querySelectorAll(".score-row").forEach((row) => {
+        const open = () => openCityModal(app, game, parseInt(row.dataset.playerIdx, 10));
+        row.addEventListener("click", open);
+        row.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                open();
+            }
+        });
     });
 }
 // ---- top-level dispatcher ----

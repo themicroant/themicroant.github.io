@@ -500,7 +500,7 @@ function renderCityPanel(game) {
     <div class="city-panel">
       <div class="panel-head">
         ${sceneThumb("wonderBuild", `${me.wonder.name} under construction`)}
-        <h3>🏙️ Your City — ${me.built.length} structures</h3>
+        <h3>${wonderBadge(me.wonder)} Your City — ${me.built.length} structures</h3>
       </div>
       ${resourceDisplay}
       ${cityEffectsHtml(game)}

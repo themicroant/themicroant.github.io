@@ -189,6 +189,15 @@ html, body {
   font-size: 0.8rem;
   margin: 0 1px;
 }
+/* Produce-choice bands with 4+ icons (e.g. Caravansery's Wood/Stone/Ore/Clay) don't fit on one
+   row at the hand grid's minimum card width — .card-band's nowrap+overflow:hidden would silently
+   clip the last icon(s) rather than shrink them (the icons are fixed-size circles, not flexible).
+   Let these wrap to a second row instead so every icon stays visible. */
+.card-band--dense {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 2px;
+}
 .card-art {
   position: relative;
   aspect-ratio: 0.82;

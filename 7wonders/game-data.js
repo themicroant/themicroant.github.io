@@ -247,6 +247,91 @@ const GameData = {
         "halikarnassos": "images/wonders/halikarnassos.png",
         "alexandria": "images/wonders/alexandria.png",
     },
+    // Small icon-style badge per Wonder — one centered symbol (matching the flat, drop-shadowed
+    // look of RESOURCES/SCIENCE_SYMBOLS `icon` art above), not the full illustrated board scene
+    // WONDER_IMAGES holds. Used wherever that scene art is too detailed to read small: the
+    // rival-city avatar, the status-bar/city chip, and the two "Wonder — Side X" modal titles (see
+    // script.js's wonderBadge()). Empty until generated; each entry falls back to that Wonder's
+    // `emoji` until then (same pattern as CARD_IMAGES/WONDER_IMAGES).
+    //
+    // ChatGPT prompt used to generate this batch (7 icons fit a 3x3 grid on a 1024x1024 "Square"
+    // canvas with 2 filler cells, cropped to 96x96 each — see .claude/skills/image-generation for
+    // the canvas/grid-fitting method this follows). Revised twice from the first version after
+    // review: (1) dropped a shared "warm gold/tan stone" palette instruction and 4 building-shaped
+    // subjects that all read as similar tan blobs at small size; (2) the resulting glossy-3D-render
+    // style clashed with this project's painted icon look and had color-fringing artifacts around
+    // each cutout, and Rhodos/Olympia needed further fixes (see inline notes below) — this is the
+    // current, corrected version:
+    //
+    //   I need 7 small badge icons for a board game called "7 Wonders", each a single bold symbol
+    //   representing one ancient wonder/civilization, arranged as a single 3x3 grid (contact sheet)
+    //   on a 1024x1024px canvas — one icon per cell, 3 columns and 3 rows, no gaps, borders, or
+    //   labels between cells.
+    //
+    //   STYLE (important): painted/illustrated game-icon style — soft directional lighting,
+    //   visible brushwork, semi-flat shading, like a hand-painted resource icon in a board game
+    //   app. NOT a glossy 3D render, NOT a plastic toy figurine, NOT photorealistic CGI. Every
+    //   icon should look like a painting of the object, not a 3D-rendered model of it.
+    //
+    //   BACKGROUND (important): a single flat, plain light-gray background per cell, completely
+    //   uniform — no gradient, no glow, no colored halo, no rainbow fringing around the object or
+    //   its drop shadow. Just the object, a simple soft gray drop shadow directly beneath it, and
+    //   flat background — this will be cut out afterward, so any background texture or color tint
+    //   will show up as leftover garbage pixels.
+    //
+    //   SCALE: each icon will be shrunk down to a 96x96px UI badge, so keep every shape bold,
+    //   chunky, and simplified — avoid fine linework, thin protruding details, or delicate wisps
+    //   (like a slender flame tip or thin wheel spokes) that would disappear or turn into noise at
+    //   that size. Leave roughly 12% empty margin around each icon within its cell so nothing
+    //   touches the edges.
+    //
+    //   These 7 icons sit side-by-side in the game's UI and must be distinguishable at a glance,
+    //   so each one needs BOTH a different overall silhouette shape AND a different dominant color
+    //   from every other icon in this set:
+    //
+    //   1. Gizah — a solid golden-tan pyramid (wide triangular silhouette)
+    //   2. Rhodos — an ancient Greek bronze statue of Helios (sun god) with a weathered
+    //      teal-green patina: a lightly-draped classical chiton (NOT a floor-length gown with
+    //      vertical folds), standing in a heroic classical contrapposto pose with a spear held
+    //      diagonally at his side and the other hand resting on his hip. Bare-headed — no crown,
+    //      no spikes, no headpiece of any kind. Do NOT include a torch or any raised arm; both
+    //      arms stay at or below shoulder height. Think ancient Greek bronze sculpture (like the
+    //      Riace bronzes), not a 19th-century neoclassical monument — a raised torch and a
+    //      radiating crown together is exactly the Statue of Liberty's silhouette, so this icon
+    //      must have neither.
+    //   3. Ephesos — a single ornate ivory-white marble column with a carved capital, standing
+    //      alone (very thin vertical silhouette — not a full temple facade)
+    //   4. Babylon — a terracotta-red stepped terrace overflowing with vivid emerald-green
+    //      cascading vines (wide horizontal tiered silhouette, the only green-heavy icon)
+    //   5. Olympia — a bold golden lightning bolt (Zeus's weapon) on its own — a jagged
+    //      diagonal bolt silhouette, no wreath, no laurel leaves anywhere in the icon (a laurel
+    //      wreath is already used elsewhere in this game's icon set and must not appear here)
+    //   6. Halikarnassos — a small dark-bronze four-horse chariot statue on a low charcoal-gray
+    //      plinth (low wide horizontal group of horse figures, not a tower or tomb building)
+    //   7. Alexandria — a tall slate-blue lighthouse tower with a bold orange-yellow flame at
+    //      its top (narrow vertical silhouette; keep the flame a solid chunky shape, not a thin
+    //      wisp)
+    //   8. Filler: Trade Amphora — a two-handled clay amphora
+    //   9. Filler: Watchtower — a small stone watchtower
+    //
+    //   All 9 icons should share the same painted illustration style, flat background, lighting,
+    //   and scale — but each of the 7 real icons (1-7) must be immediately tellable apart from
+    //   the others by shape and color alone, even as a small thumbnail.
+    //
+    // After generating: crop each of the 9 cells at 341x341px (1024/3), discard the 2 filler cells,
+    // remove each real icon's background (transparency, matching res-*/sym-* in game/images/icons/),
+    // resize to 96x96, and save as game/images/icons/wonder-<id>.png (ids: gizah, rhodos, ephesos,
+    // babylon, olympia, halikarnassos, alexandria). Add each path here, run `npm run build`, and
+    // check it in-game at its actual small size before committing.
+    WONDER_BADGES: {
+        "gizah": "images/icons/wonder-gizah.png",
+        "rhodos": "images/icons/wonder-rhodos.png",
+        "ephesos": "images/icons/wonder-ephesos.png",
+        "babylon": "images/icons/wonder-babylon.png",
+        "olympia": "images/icons/wonder-olympia.png",
+        "halikarnassos": "images/icons/wonder-halikarnassos.png",
+        "alexandria": "images/icons/wonder-alexandria.png",
+    },
     // Scene images for screens and panels
     SCENES: {
         // Age I scenes

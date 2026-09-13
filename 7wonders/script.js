@@ -62,6 +62,15 @@ function sciIcon(key, size) {
 function costIcon(key, size) {
     return key === "coins" ? iconImg(GameData.ICONS.coins, "Coins", size) : resIcon(key, size);
 }
+// Small badge identifying which Wonder a city is playing — the rival-city avatar, the status-bar
+// chip, and the two Wonder-detail modal titles all want something legible at ~20px, which the
+// full WONDER_IMAGES board illustration isn't. Uses the icon-style WONDER_BADGES art where it
+// exists, falling back to the Wonder's plain `emoji` (same fallback shape as CARD_IMAGES/
+// WONDER_IMAGES elsewhere in this file).
+function wonderBadge(w, size) {
+    const badge = GameData.WONDER_BADGES[w.id];
+    return badge ? iconImg(badge, w.name, size) : w.emoji;
+}
 // The hand is a responsive CSS grid (column count varies by viewport width), so Up/Down arrow
 // navigation reads the live column count from computed style rather than assuming a fixed value.
 function gridColumnCount(gridEl) {
@@ -109,6 +118,10 @@ function primaryValueBadge(card) {
 // Card band shown for all card types — colored bar at top with the primary stat/resource
 function cardBandHtml(card, game, playerIdx) {
     let content = "";
+    // Set once a produce band's icon count would overflow a single row at the hand grid's minimum
+    // card width (see .card-band's flex-wrap:nowrap + overflow:hidden — without this, a card like
+    // Caravansery with 4 choice icons silently clips the last one or two instead of wrapping).
+    let bandClass = "";
     if (card.type === "basic" || card.type === "manufactured") {
         // Production icons for resource cards — show icon repeated for produceCount
         if (card.produces && card.produces.length) {
@@ -118,6 +131,8 @@ function cardBandHtml(card, game, playerIdx) {
                 return Array(count).fill(`<span class="band-icon"><span>${icon}</span></span>`).join("");
             }).join(card.producesChoice ? '<span class="band-separator">•</span>' : "");
             content = icons;
+            if (card.produces.length * (card.produceCount || 1) >= 4)
+                bandClass = " card-band--dense";
         }
     }
     else if (card.type === "civilian") {
@@ -163,6 +178,8 @@ function cardBandHtml(card, game, playerIdx) {
                 return Array(count).fill(`<span class="band-icon"><span>${icon}</span></span>`).join("");
             }).join(card.producesChoice ? '<span class="band-separator">•</span>' : "");
             content = icons;
+            if (card.produces.length * (card.produceCount || 1) >= 4)
+                bandClass = " card-band--dense";
         }
         else if (card.coinsOnPlay) {
             content = `<span class="band-icon"><span>${iconImg(GameData.ICONS.coins, "Coins")}</span> +${card.coinsOnPlay}</span>`;
@@ -193,7 +210,7 @@ function cardBandHtml(card, game, playerIdx) {
             content = `<span class="band-icon">${shieldIcons}</span>`;
         }
     }
-    return `<div class="card-band">${content}</div>`;
+    return `<div class="card-band${bandClass}">${content}</div>`;
 }
 // ---- card rendering (hand screen) ----
 function renderCard(game, card, isSelected, isTabbable) {
@@ -341,7 +358,7 @@ function renderStatusBar(game) {
       <div class="status-chips">
         <span class="chip">Age <strong>${game.age}</strong></span>
         <span class="chip">${iconImg(GameData.ICONS.coins, "Coins")} <strong>${me.coins}</strong></span>
-        <span class="chip">${me.wonder.emoji} ${stageDots}</span>
+        <span class="chip">${wonderBadge(me.wonder)} ${stageDots}</span>
         <button type="button" class="city-toggle" id="city-toggle">${state.showCity ? "▲" : "▼"} City</button>
       </div>
     </div>
@@ -357,7 +374,7 @@ function renderRivalsStrip(game) {
         const tag = idx === left ? "Left" : idx === right ? "Right" : "";
         const shields = GameEngine.computeMilitaryStrength(game, idx);
         return `<button type="button" class="rival-chip${isNeighbor ? " neighbor" : ""}" data-rival-id="${idx}" title="Click to view their city">
-        <span class="rival-emoji">${p.wonder.emoji}</span>
+        <span class="rival-emoji">${wonderBadge(p.wonder)}</span>
         <span>${tag ? `<span class="rival-tag">${tag}</span> ` : ""}${escapeHtml(p.name)} · ${iconImg(GameData.ICONS.coins, "Coins")}${p.coins} · ${iconImg(GameData.ICONS.shields, "Shields")}${shields} · 🃏${p.built.length}</span>
       </button>`;
     })
@@ -395,7 +412,7 @@ function renderRivalCityModal(game, rivalIdx) {
     return `
     <div class="modal-overlay" id="rival-modal">
       <div class="modal-panel">
-        <h3>${rival.wonder.emoji} ${rivalIdx === 0 ? "Your City" : `${escapeHtml(rival.name)}'s City`}</h3>
+        <h3>${wonderBadge(rival.wonder)} ${rivalIdx === 0 ? "Your City" : `${escapeHtml(rival.name)}'s City`}</h3>
         <div class="card-row">
           <span class="label">Wonder:</span> ${rival.wonder.name} (Stage ${rival.wonderStagesBuilt}/${rival.wonder.stages.length})
         </div>
@@ -637,7 +654,7 @@ function renderWonderDetailModal(wonderId, side) {
     return `
     <div class="modal-overlay" id="wonder-detail-modal">
       <div class="modal-panel">
-        <h3>${wonder.emoji} ${escapeHtml(wonder.name)} — Side ${side}</h3>
+        <h3>${wonderBadge(wonder)} ${escapeHtml(wonder.name)} — Side ${side}</h3>
         <div class="card-row" style="margin-bottom: 8px;">
           <span class="label">Starting Resource:</span> ${resIcon(wonder.resource)} ${GameData.RESOURCES[wonder.resource].label}
         </div>

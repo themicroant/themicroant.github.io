@@ -104,6 +104,7 @@ const SPRITE_SHEETS = {
     // Only sheets that exist in game/sprites/ are listed; script.ts falls back to emoji for any
     // sprite whose sheet is missing here. Add a line when a new sheet is normalized and committed.
     "hulls-a": { file: "sprites/hulls-a.png", cols: 4, rows: 4, cell: 256 },
+    "hulls-b": { file: "sprites/hulls-b.png", cols: 4, rows: 4, cell: 256 },
 };
 const CONSTANTS = {
     LANES: 7, COLUMNS: 21, TURNS: 21,

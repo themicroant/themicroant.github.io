@@ -85,6 +85,11 @@ input, select { font: inherit; background: var(--bg-2); color: var(--text); bord
 .ship-panel .ship-art { text-align: center; padding: 6px; background: radial-gradient(circle, #1c2b52 0%, var(--bg-2) 70%); border-radius: 12px; border: 1px solid var(--border); }
 .sprite { display: inline-block; background-repeat: no-repeat; border-radius: 8px; vertical-align: middle; image-rendering: auto; }
 .sprite.inline { border-radius: 4px; box-shadow: 0 0 0 1px rgba(0,0,0,0.6); }
+.sprite.site { border-radius: 6px; margin-bottom: 2px; }
+.sprite.face { float: right; margin: 0 0 6px 8px; border-radius: 10px; border: 1px solid var(--border); }
+.card-face::after { content: ""; display: block; clear: both; }
+.cell .t { display: flex; align-items: center; gap: 4px; }
+.cell .card-emoji { font-size: 0.95rem; }
 .sprite-fallback { display: inline-block; text-align: center; vertical-align: middle; }
 .cell .ships { display: flex; gap: 1px; letter-spacing: 0; }
 .bar { height: 10px; background: var(--bg-3); border-radius: 5px; overflow: hidden; }

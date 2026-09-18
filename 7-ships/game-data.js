@@ -21,16 +21,16 @@ const RESOURCES = [
     { id: "data", label: "Data", emoji: "📡", start: 0, base: false },
 ];
 const SITE_TYPES = [
-    { id: "void", name: "Empty Space", emoji: "🕳️", colour: "grey", calm: true, blurb: "Nothing here but dust and the occasional drifting hull." },
-    { id: "ice", name: "Ice World", emoji: "🧊", colour: "white", calm: true, blurb: "Frozen oceans. Water for the taking, and the Vrell who love it." },
-    { id: "garden", name: "Garden World", emoji: "🌿", colour: "green", calm: true, blurb: "Something still grows. Rations, and sometimes company." },
-    { id: "gas", name: "Gas Giant", emoji: "🪐", colour: "orange", calm: true, blurb: "Skim the upper clouds for fuel. The Solenne drift in the bands below." },
-    { id: "rock", name: "Rock World", emoji: "🪨", colour: "brown", calm: true, blurb: "Dead stone, rich in steel. Karrak hunting grounds." },
-    { id: "asteroid", name: "Asteroid Belt", emoji: "☄️", colour: "black", calm: false, blurb: "Steel and crystal in the rubble, if the rubble doesn't get you first." },
-    { id: "anomaly", name: "Anomaly", emoji: "🌀", colour: "purple", calm: false, blurb: "Physics misbehaves here. Data, discoveries, and things that notice you." },
-    { id: "derelict", name: "Derelict Field", emoji: "🛰️", colour: "rust", calm: false, blurb: "Wrecks of those who came before. Their technology is still aboard." },
-    { id: "hazard", name: "Hazard World", emoji: "🌋", colour: "red", calm: false, blurb: "Everything a ship needs, guarded by everything that kills a ship." },
-    { id: "station", name: "Waystation", emoji: "🏪", colour: "blue", calm: true, blurb: "Neutral ground. Trade, refit, recruit, and buy technology." },
+    { id: "void", name: "Empty Space", emoji: "🕳️", colour: "grey", calm: true, blurb: "Nothing here but dust and the occasional drifting hull.", sprite: { sheet: "sites", index: 0 } },
+    { id: "ice", name: "Ice World", emoji: "🧊", colour: "white", calm: true, blurb: "Frozen oceans. Water for the taking, and the Vrell who love it.", sprite: { sheet: "sites", index: 1 } },
+    { id: "garden", name: "Garden World", emoji: "🌿", colour: "green", calm: true, blurb: "Something still grows. Rations, and sometimes company.", sprite: { sheet: "sites", index: 2 } },
+    { id: "gas", name: "Gas Giant", emoji: "🪐", colour: "orange", calm: true, blurb: "Skim the upper clouds for fuel. The Solenne drift in the bands below.", sprite: { sheet: "sites", index: 3 } },
+    { id: "rock", name: "Rock World", emoji: "🪨", colour: "brown", calm: true, blurb: "Dead stone, rich in steel. Karrak hunting grounds.", sprite: { sheet: "sites", index: 4 } },
+    { id: "asteroid", name: "Asteroid Belt", emoji: "☄️", colour: "black", calm: false, blurb: "Steel and crystal in the rubble, if the rubble doesn't get you first.", sprite: { sheet: "sites", index: 5 } },
+    { id: "anomaly", name: "Anomaly", emoji: "🌀", colour: "purple", calm: false, blurb: "Physics misbehaves here. Data, discoveries, and things that notice you.", sprite: { sheet: "sites", index: 6 } },
+    { id: "derelict", name: "Derelict Field", emoji: "🛰️", colour: "rust", calm: false, blurb: "Wrecks of those who came before. Their technology is still aboard.", sprite: { sheet: "sites", index: 7 } },
+    { id: "hazard", name: "Hazard World", emoji: "🌋", colour: "red", calm: false, blurb: "Everything a ship needs, guarded by everything that kills a ship.", sprite: { sheet: "sites", index: 8 } },
+    { id: "station", name: "Waystation", emoji: "🏪", colour: "blue", calm: true, blurb: "Neutral ground. Trade, refit, recruit, and buy technology.", sprite: { sheet: "sites", index: 9 } },
 ];
 const SITE_WEIGHTS = {
     easy: { void: 3, ice: 5, garden: 5, gas: 5, rock: 5, asteroid: 2, anomaly: 1, derelict: 1, hazard: 1 },
@@ -105,7 +105,9 @@ const SPRITE_SHEETS = {
     // sprite whose sheet is missing here. Add a line when a new sheet is normalized and committed.
     "hulls-a": { file: "sprites/hulls-a.png", cols: 4, rows: 4, cell: 256 },
     "hulls-b": { file: "sprites/hulls-b.png", cols: 4, rows: 4, cell: 256 },
+    "sites": { file: "sprites/sites.png", cols: 4, rows: 4, cell: 256 },
 };
+const SCENE_SPRITES = { earthWreck: { sheet: "sites", index: 10 }, rimBeacon: { sheet: "sites", index: 11 } };
 const CONSTANTS = {
     LANES: 7, COLUMNS: 21, TURNS: 21,
     SAFE_THRESHOLD: { easy: 1, medium: 3, hard: 5 }, // §4e
@@ -127,7 +129,7 @@ const CONSTANTS = {
 };
 const GameData = {
     RESOURCES, SITE_TYPES, SITE_WEIGHTS, SITE_DECKS, ALIENS, TECH_CARDS, ARTIFACTS, HULLS,
-    AI_PROFILES, SPRITE_SHEETS, C: CONSTANTS,
+    AI_PROFILES, SPRITE_SHEETS, SCENE_SPRITES, C: CONSTANTS,
 };
 if (typeof module !== "undefined" && module.exports)
     module.exports = GameData;

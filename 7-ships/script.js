@@ -44,6 +44,12 @@ function spriteEl(sprite, size, fallback, extraClass = "") {
     return h("span", { class: "sprite " + extraClass, title: fallback,
         style: `width:${size}px;height:${size}px;background-image:url(${sheet.file});background-size:${sheet.cols * size}px ${sheet.rows * size}px;background-position:-${col * size}px -${row * size}px` });
 }
+function siteSprite(s, size, extraClass = "") {
+    if (s.isRim)
+        return spriteEl(D.SCENE_SPRITES.rimBeacon, size, "🌌", extraClass);
+    const t = typeInfo(s.type);
+    return spriteEl(t.sprite, size, t.emoji, extraClass);
+}
 function hullSprite(p, size, extraClass = "") { return spriteEl(p.hull.sprites[E.tier(p)], size, p.hull.emoji, extraClass); }
 function toast(msg) { const t = h("div", { class: "toast" }, msg); document.body.appendChild(t); setTimeout(() => t.remove(), 3000); }
 function tryAct(r, okMsg) { if (!r.success) {
@@ -85,7 +91,7 @@ function renderStrip() {
         if (col === 0) { // Earth: the launch column, no sites
             const cells = [h("div", { class: "col-head" + (p.col === 0 ? " current" : "") }, "0 · Earth")];
             for (let lane = 0; lane < K.LANES; lane++) {
-                const cell = h("div", { class: "cell fog" }, h("div", { class: "t" }, "🌍"), h("div", { class: "dim" }, "debris"));
+                const cell = h("div", { class: "cell fog" }, spriteEl(D.SCENE_SPRITES.earthWreck, 40, "🌍", "site"), h("div", { class: "dim" }, "debris"));
                 const ships = g.players.filter((q) => q.seat !== ME && q.col === 0 && q.lane === lane);
                 if (ships.length)
                     cell.appendChild(h("div", { class: "ships" }, ...ships.map((q) => hullSprite(q, 22, "inline"))));
@@ -114,7 +120,7 @@ function renderStrip() {
             const ships = g.players.filter((q) => q.seat !== ME && q.col === col && q.lane === lane);
             const body = [];
             if (known) {
-                body.push(h("div", { class: "t" }, s.isRim ? "🌌" : s.card ? s.card.emoji : typeInfo(s.type).emoji));
+                body.push(h("div", { class: "t" }, siteSprite(s, 40, "site"), s.card ? h("span", { class: "card-emoji" }, s.card.emoji) : null));
                 if (s.isRim)
                     body.push("Outer Rim");
                 else if (s.isStation)
@@ -227,12 +233,12 @@ function peekButton() {
 }
 function renderCardFace(s) {
     if (s.isRim)
-        return h("div", { class: "card-face" }, h("div", { class: "title" }, "🌌 The Outer Rim"), h("div", { class: "flavour" }, "Past the last planet there is only the dark, and you crossed it."));
+        return h("div", { class: "card-face" }, siteSprite(s, 96, "face"), h("div", { class: "title" }, "🌌 The Outer Rim"), h("div", { class: "flavour" }, "Past the last planet there is only the dark, and you crossed it."));
     if (s.isStation)
-        return h("div", { class: "card-face" }, h("div", { class: "title" }, "🏪 Waystation"), h("div", { class: "flavour" }, typeInfo("station").blurb));
+        return h("div", { class: "card-face" }, siteSprite(s, 96, "face"), h("div", { class: "title" }, "🏪 Waystation"), h("div", { class: "flavour" }, typeInfo("station").blurb));
     const c = s.card;
     if (!c)
-        return h("div", { class: "card-face" }, h("div", { class: "title" }, `${typeInfo(s.type).emoji} ${typeInfo(s.type).name}`), h("div", { class: "flavour" }, "Face down."));
+        return h("div", { class: "card-face" }, siteSprite(s, 96, "face"), h("div", { class: "title" }, `${typeInfo(s.type).emoji} ${typeInfo(s.type).name}`), h("div", { class: "flavour" }, "Face down."));
     const tags = [];
     if (c.hazard)
         tags.push(h("span", { class: "tag haz" }, `☠ hazard ${c.hazard}`));
@@ -246,7 +252,7 @@ function renderCardFace(s) {
         tags.push(h("span", { class: "tag tech" }, s.techClaimed ? "🧲 tech (claimed)" : "🧲 tech blueprint"));
     if (c.artifact)
         tags.push(h("span", { class: "tag tech" }, s.artifactClaimed ? "🗝️ artifact (claimed)" : "🗝️ artifact"));
-    return h("div", { class: "card-face" }, h("div", { class: "title" }, `${c.emoji} ${c.title}`), h("div", { class: "flavour" }, c.flavour), h("div", {}, ...tags));
+    return h("div", { class: "card-face" }, siteSprite(s, 96, "face"), h("div", { class: "title" }, `${c.emoji} ${c.title}`), h("div", { class: "flavour" }, c.flavour), h("div", {}, ...tags));
 }
 function tokenE(k) { return k === "physics" ? "🔬" : k === "biology" ? "🧬" : "⚙️"; }
 // ---- station ----

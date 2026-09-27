@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retro Jukebox</title>
+<style>
+  :root { --bg: #111; --panel: #1b1b1b; --line: #3a3a3a; --text: #eee; --dim: #999; --accent: #4cf3ff; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text);
+         display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 16px; }
+  .box { display: grid; gap: 12px; width: min(420px, 100%); }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; letter-spacing: 0.05em; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  li button { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 12px; }
+  li button[aria-pressed="true"] { border-color: var(--accent); }
+  li .meta { color: var(--dim); font-size: 0.85em; white-space: nowrap; }
+  button { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--dim); }
+  .row { display: flex; gap: 8px; align-items: center; } .row button { flex: 1; }
+  #status { color: var(--dim); min-height: 1.3em; margin: 0; }
+</style>
+</head>
+<body>
+<main class="box">
+  <h1>Retro Jukebox</h1>
+  <ul id="songs"></ul>
+  <label><input type="checkbox" id="loop" checked> Loop</label>
+  <div class="row">
+    <button id="play">Play</button>
+    <button id="stop">Stop</button>
+  </div>
+  <p id="status" aria-live="polite"></p>
+</main>
+
+<!-- Engine -->
+<script src="player.js"></script>
+<!-- Songs: add or remove a line to swap tracks -->
+<script src="songs/crystal-clash.js"></script>
+<script src="songs/neon-onslaught.js"></script>
+<script src="songs/bright-victory.js"></script>
+
+<script>
+  const player = new RetroPlayer();
+  const list = document.querySelector("#songs");
+  const status = document.querySelector("#status");
+  const loop = document.querySelector("#loop");
+  let selected = RetroSongs.list[0];
+
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+
+  function render() {
+    list.replaceChildren(...RetroSongs.list.map((song) => {
+      const { seconds } = RetroPlayer.describeSong(song);
+      const btn = document.createElement("button");
+      btn.setAttribute("aria-pressed", String(song === selected));
+      btn.innerHTML = `<span></span><span class="meta">${song.bpm} BPM · ${fmt(seconds)}</span>`;
+      btn.firstChild.textContent = song.title;
+      btn.onclick = () => { selected = song; render(); play(); };
+      const li = document.createElement("li");
+      li.append(btn);
+      return li;
+    }));
+  }
+
+  function play() {
+    if (!selected) return;
+    status.textContent = `Now playing: ${selected.title}${loop.checked ? " (looping)" : ""}`;
+    player.play(selected, { loop: loop.checked, onEnd: () => { status.textContent = ""; } })
+      .catch((e) => { status.textContent = `Error: ${e.message}`; });
+  }
+
+  document.querySelector("#play").onclick = play;
+  document.querySelector("#stop").onclick = () => { player.stop(); status.textContent = ""; };
+  render();
+</script>
+</body>
+</html>

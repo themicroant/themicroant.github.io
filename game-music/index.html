@@ -30,6 +30,7 @@
   <div class="row">
     <button id="play">Play</button>
     <button id="stop">Stop</button>
+    <button id="wav">Save WAV</button>
   </div>
   <p id="status" aria-live="polite"></p>
 </main>
@@ -40,6 +41,7 @@
 <script src="songs/crystal-clash.js"></script>
 <script src="songs/neon-onslaught.js"></script>
 <script src="songs/ashen-horizon.js"></script>
+<script src="songs/ashen-horizon-ii.js"></script>
 <script src="songs/ember-requiem.js"></script>
 <script src="songs/bright-victory.js"></script>
 
@@ -75,6 +77,23 @@
 
   document.querySelector("#play").onclick = play;
   document.querySelector("#stop").onclick = () => { player.stop(); status.textContent = ""; };
+  document.querySelector("#wav").onclick = async () => {
+    if (!selected) return;
+    const song = selected;
+    status.textContent = `Rendering ${song.title}…`;
+    try {
+      const buffer = await RetroPlayer.render(song);
+      const url = URL.createObjectURL(new Blob([RetroPlayer.encodeWav(buffer)], { type: "audio/wav" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${song.id}.wav`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      status.textContent = `Saved ${song.id}.wav`;
+    } catch (e) {
+      status.textContent = `Error: ${e.message}`;
+    }
+  };
   render();
 </script>
 </body>

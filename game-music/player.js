@@ -1,5 +1,5 @@
 /*
- * player.js — the retro chiptune engine.
+ * player.js — the retro game music engine.
  * Knows nothing about any particular song. It reads a song *data* object
  * (see songs/*.js) and schedules it on the Web Audio API.
  *
@@ -8,8 +8,13 @@
  *   C#5/4.  dotted quarter              (trailing "." = x1.5)
  *   R/4     rest
  *   K S H   drums: kick, snare, hi-hat  (drum tracks only)
+ *   O C T   drums: open hi-hat, crash, tom
  *   [ ... ]x4   repeat the bracketed tokens 4 times
  *   |       bar line (ignored, just for readability)
+ *
+ * Instruments default to raw chip voices (NES-like). Songs can opt into a richer,
+ * N64-like sound per instrument: envelopes, detuned voices, custom harmonics,
+ * vibrato, drive, filters, stereo pan, reverb and a "studio" drum kit.
  *
  * Full reference: docs/song-format.md
  */
@@ -17,8 +22,10 @@
   "use strict";
 
   const NOTE_INDEX = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-  const DRUMS = new Set(["K", "S", "H"]);
+  const DRUMS = new Set(["K", "S", "H", "O", "C", "T"]);
   const WAVES = new Set(["square", "sawtooth", "triangle", "sine"]);
+  const KITS = new Set(["chip", "studio"]);
+  const FILTERS = new Set(["lowpass", "highpass", "bandpass"]);
 
   // Default instrument per track name. A song can override via song.instruments.
   const DEFAULT_INSTRUMENTS = {
@@ -71,6 +78,49 @@
     return instruments;
   }
 
+  function checkNumber(value, lo, hi, what, bad) {
+    if (value !== undefined && !(typeof value === "number" && value >= lo && value <= hi)) {
+      bad(`${what} must be a number from ${lo} to ${hi}`);
+    }
+  }
+
+  function checkInstrument(name, inst, fail) {
+    const bad = (msg) => fail(`instrument "${name}": ${msg}`);
+    if (inst.drums) {
+      if (inst.kit !== undefined && !KITS.has(inst.kit)) bad(`unknown kit "${inst.kit}"`);
+    } else if (inst.harmonics !== undefined) {
+      if (!Array.isArray(inst.harmonics) || !inst.harmonics.length
+          || inst.harmonics.some((h) => typeof h !== "number")) {
+        bad("harmonics must be a non-empty array of numbers");
+      }
+    } else if (!WAVES.has(inst.wave)) {
+      bad(`unknown wave "${inst.wave}"`);
+    }
+    checkNumber(inst.volume, 0, 2, "volume", bad);
+    checkNumber(inst.pan, -1, 1, "pan", bad);
+    checkNumber(inst.reverb, 0, 1, "reverb", bad);
+    checkNumber(inst.drive, 0, 1, "drive", bad);
+    checkNumber(inst.detune, 0, 100, "detune", bad);
+    checkNumber(inst.gate, 0.05, 1, "gate", bad);
+    if (inst.voices !== undefined && !(Number.isInteger(inst.voices) && inst.voices >= 1 && inst.voices <= 6)) {
+      bad("voices must be a whole number from 1 to 6");
+    }
+    if (inst.filter) {
+      if (!FILTERS.has(inst.filter.type || "lowpass")) bad(`unknown filter type "${inst.filter.type}"`);
+      checkNumber(inst.filter.freq, 20, 20000, "filter.freq", bad);
+      checkNumber(inst.filter.q, 0, 30, "filter.q", bad);
+    }
+    if (inst.env) {
+      for (const k of ["a", "d", "r"]) checkNumber(inst.env[k], 0, 10, `env.${k}`, bad);
+      checkNumber(inst.env.s, 0, 1, "env.s", bad);
+    }
+    if (inst.vibrato) {
+      checkNumber(inst.vibrato.rate, 0, 20, "vibrato.rate", bad);
+      checkNumber(inst.vibrato.depth, 0, 100, "vibrato.depth", bad);
+      checkNumber(inst.vibrato.delay, 0, 10, "vibrato.delay", bad);
+    }
+  }
+
   // Turns song data into { sectionName: { tracks: { trackName: [events] }, beats } }.
   // Throws on anything that would play wrong: tracks of different lengths within
   // a section, unknown sections, bad notes, drum hits on a melodic track, etc.
@@ -81,11 +131,15 @@
     if (!song.title) fail("missing title");
     if (!(song.bpm > 0)) fail("bpm must be a positive number");
     if (!Array.isArray(song.arrangement) || !song.arrangement.length) fail("arrangement is empty");
+    if (song.reverb) {
+      checkNumber(song.reverb.seconds, 0.1, 10, "reverb.seconds", fail);
+      checkNumber(song.reverb.decay, 0.1, 20, "reverb.decay", fail);
+      checkNumber(song.reverb.send, 0, 1, "reverb.send", fail);
+    }
+    if (song.master) checkNumber(song.master.lowpass, 20, 20000, "master.lowpass", fail);
 
     const instruments = resolveInstruments(song);
-    for (const [name, inst] of Object.entries(instruments)) {
-      if (!inst.drums && !WAVES.has(inst.wave)) fail(`instrument "${name}" has unknown wave "${inst.wave}"`);
-    }
+    for (const [name, inst] of Object.entries(instruments)) checkInstrument(name, inst, fail);
 
     const sections = {};
     for (const [name, tracks] of Object.entries(song.sections || {})) {
@@ -98,7 +152,7 @@
         for (const ev of events) {
           if (ev.pitch === "R") continue;
           if (inst.drums) {
-            if (!DRUMS.has(ev.pitch)) fail(`section "${name}" track "${track}": "${ev.pitch}" is not a drum (K, S, H)`);
+            if (!DRUMS.has(ev.pitch)) fail(`section "${name}" track "${track}": "${ev.pitch}" is not a drum (K, S, H, O, C, T)`);
           } else {
             try { noteToFreq(ev.pitch); } catch (e) { fail(`section "${name}" track "${track}": ${e.message}`); }
           }
@@ -133,6 +187,276 @@
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Sound. Everything below takes an AudioContext (real-time or offline).
+
+  const noiseCache = new WeakMap();
+  function noiseBuffer(ctx) {
+    if (!noiseCache.has(ctx)) {
+      // Two seconds of white noise, reused for snares, hi-hats and cymbals.
+      const len = ctx.sampleRate * 2;
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      noiseCache.set(ctx, buf);
+    }
+    return noiseCache.get(ctx);
+  }
+
+  // Stereo impulse response: decaying noise, a cheap but convincing room/hall.
+  function impulseResponse(ctx, seconds, decay) {
+    const len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const data = buf.getChannelData(c);
+      for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+    return buf;
+  }
+
+  // Soft-clipping curve for guitar-like distortion.
+  function driveCurve(drive) {
+    const k = 1 + drive * 30;
+    const n = 2048;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.tanh(k * x) / Math.tanh(k);
+    }
+    return curve;
+  }
+
+  // Builds the mixer for one song: a chain per track (drive, filter, pan, reverb
+  // send) feeding a master bus (optional lowpass and compressor) into `destination`.
+  // Tracks with no extra options get a plain gain, so chip songs sound as before.
+  function buildRig(ctx, song, destination) {
+    const instruments = resolveInstruments(song);
+    const master = ctx.createGain();
+    master.gain.value = song.volume ?? 0.8;
+    let node = master;
+    const m = song.master || {};
+    if (m.lowpass) {
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.value = m.lowpass;
+      node.connect(lp);
+      node = lp;
+    }
+    if (m.compress) {
+      const c = ctx.createDynamicsCompressor();
+      c.threshold.value = -16;
+      c.knee.value = 12;
+      c.ratio.value = 4;
+      c.attack.value = 0.004;
+      c.release.value = 0.2;
+      node.connect(c);
+      node = c;
+    }
+    node.connect(destination);
+
+    let reverbIn = null;
+    if (song.reverb) {
+      reverbIn = ctx.createConvolver();
+      reverbIn.buffer = impulseResponse(ctx, song.reverb.seconds ?? 2, song.reverb.decay ?? 3);
+      reverbIn.connect(master);
+    }
+
+    const tracks = {};
+    const trackFor = (name) => {
+      if (tracks[name]) return tracks[name];
+      const inst = instruments[name] || DEFAULT_INSTRUMENTS.lead;
+      const input = ctx.createGain();
+      let out = input;
+      const drive = !inst.drums && inst.drive > 0;
+      if (drive) {
+        const shaper = ctx.createWaveShaper();
+        shaper.curve = driveCurve(inst.drive);
+        shaper.oversample = "2x";
+        const post = ctx.createGain();
+        post.gain.value = inst.volume;
+        out.connect(shaper).connect(post);
+        out = post;
+      }
+      if (inst.filter) {
+        const f = ctx.createBiquadFilter();
+        f.type = inst.filter.type || "lowpass";
+        f.frequency.value = inst.filter.freq ?? 3000;
+        f.Q.value = inst.filter.q ?? 0.7;
+        out.connect(f);
+        out = f;
+      }
+      if (inst.pan && ctx.createStereoPanner) {
+        const p = ctx.createStereoPanner();
+        p.pan.value = inst.pan;
+        out.connect(p);
+        out = p;
+      }
+      out.connect(master);
+      const send = inst.reverb ?? (song.reverb && song.reverb.send) ?? 0;
+      if (reverbIn && send > 0) {
+        const g = ctx.createGain();
+        g.gain.value = send;
+        out.connect(g).connect(reverbIn);
+      }
+      let wave = null;
+      if (!inst.drums && inst.harmonics) {
+        const imag = new Float32Array([0, ...inst.harmonics]);
+        wave = ctx.createPeriodicWave(new Float32Array(imag.length), imag);
+      }
+      // Driven tracks are driven at full level; the post-drive gain sets their volume.
+      const level = (drive ? 1 : inst.volume) / Math.sqrt(inst.voices || 1);
+      return (tracks[name] = { inst, input, wave, level });
+    };
+
+    return { ctx, master, trackFor, noise: noiseBuffer(ctx), reverbTail: song.reverb ? (song.reverb.seconds ?? 2) : 0 };
+  }
+
+  function playTone(rig, track, freq, start, dur) {
+    const { ctx } = rig;
+    const { inst, input, wave, level } = track;
+    const gate = inst.gate ?? 0.92;
+    const g = ctx.createGain();
+    let stopAt;
+    if (inst.env) {
+      const { a = 0.005, d = 0.1, s = 0.7, r = 0.1 } = inst.env;
+      const off = start + Math.max(a + 0.002, dur * gate);
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(level, start + a);
+      g.gain.setTargetAtTime(level * s, start + a, Math.max(d, 0.001) / 3);
+      g.gain.setTargetAtTime(0, off, Math.max(r, 0.001) / 4);
+      stopAt = off + r + 0.05;
+    } else {
+      // The original chip envelope: quick attack, short decay, fade over the note.
+      const end = start + dur * gate;
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(level, start + 0.005);
+      g.gain.linearRampToValueAtTime(level * 0.7, start + Math.min(0.06, dur * 0.3));
+      g.gain.linearRampToValueAtTime(0.0001, end);
+      stopAt = end + 0.02;
+    }
+    g.connect(input);
+
+    let lfoGain = null;
+    if (inst.vibrato) {
+      const { rate = 5.5, depth = 15, delay = 0.2 } = inst.vibrato;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = rate;
+      lfoGain = ctx.createGain();
+      lfoGain.gain.setValueAtTime(0, start + delay);
+      lfoGain.gain.linearRampToValueAtTime(depth, start + delay + 0.25);
+      lfo.connect(lfoGain);
+      lfo.start(start);
+      lfo.stop(stopAt);
+    }
+
+    const voices = inst.voices || 1;
+    for (let v = 0; v < voices; v++) {
+      const osc = ctx.createOscillator();
+      if (wave) osc.setPeriodicWave(wave);
+      else osc.type = inst.wave;
+      osc.frequency.value = freq;
+      if (voices > 1) osc.detune.value = (inst.detune || 0) * ((2 * v) / (voices - 1) - 1);
+      if (lfoGain) lfoGain.connect(osc.detune);
+      osc.connect(g);
+      osc.start(start);
+      osc.stop(stopAt);
+    }
+  }
+
+  // Filtered noise burst. `filters` is a list of [type, freq, q].
+  function noiseHit(rig, out, start, len, gain, filters) {
+    const { ctx } = rig;
+    const src = ctx.createBufferSource();
+    src.buffer = rig.noise;
+    let node = src;
+    for (const [type, freq, q] of filters) {
+      const f = ctx.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      if (q !== undefined) f.Q.value = q;
+      node.connect(f);
+      node = f;
+    }
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(gain, start);
+    g.gain.exponentialRampToValueAtTime(0.001, start + len);
+    node.connect(g).connect(out);
+    src.start(start, Math.random() * (rig.noise.duration - len - 0.1));
+    src.stop(start + len + 0.01);
+  }
+
+  // Sine (or triangle) with a pitch drop: kicks, toms, snare bodies.
+  function sweep(rig, out, start, from, to, sweepTime, len, gain, type = "sine") {
+    const { ctx } = rig;
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    const g = ctx.createGain();
+    osc.frequency.setValueAtTime(from, start);
+    osc.frequency.exponentialRampToValueAtTime(to, start + sweepTime);
+    g.gain.setValueAtTime(gain, start);
+    g.gain.exponentialRampToValueAtTime(0.001, start + len);
+    osc.connect(g).connect(out);
+    osc.start(start);
+    osc.stop(start + len + 0.01);
+  }
+
+  function playDrum(rig, track, type, start) {
+    const out = track.input;
+    const vol = track.inst.volume;
+    if (track.inst.kit === "studio") {
+      // Fuller, sample-like kit: layered bodies, clicks and longer cymbals.
+      switch (type) {
+        case "K":
+          sweep(rig, out, start, 115, 44, 0.08, 0.26, vol * 1.8);
+          noiseHit(rig, out, start, 0.015, vol * 0.5, [["lowpass", 4000]]);
+          return;
+        case "S":
+          sweep(rig, out, start, 210, 155, 0.08, 0.13, vol * 0.9, "triangle");
+          noiseHit(rig, out, start, 0.22, vol * 1.1, [["bandpass", 2600, 0.8]]);
+          noiseHit(rig, out, start, 0.1, vol * 0.35, [["highpass", 5500]]);
+          return;
+        case "H": noiseHit(rig, out, start, 0.045, vol * 0.35, [["highpass", 9000]]); return;
+        case "O": noiseHit(rig, out, start, 0.35, vol * 0.28, [["highpass", 8000]]); return;
+        case "C":
+          noiseHit(rig, out, start, 1.8, vol * 0.4, [["highpass", 4500]]);
+          noiseHit(rig, out, start, 0.6, vol * 0.2, [["bandpass", 7500, 1.2]]);
+          return;
+        case "T":
+          sweep(rig, out, start, 165, 95, 0.15, 0.45, vol * 1.3);
+          noiseHit(rig, out, start, 0.05, vol * 0.25, [["lowpass", 900]]);
+          return;
+      }
+      return;
+    }
+    // Chip kit: pitch-dropping sine kick, high-passed white noise for the rest.
+    switch (type) {
+      case "K": sweep(rig, out, start, 150, 40, 0.12, 0.15, vol * 1.6); return;
+      case "S": noiseHit(rig, out, start, 0.12, vol, [["highpass", 1200]]); return;
+      case "H": noiseHit(rig, out, start, 0.04, vol * 0.4, [["highpass", 7000]]); return;
+      case "O": noiseHit(rig, out, start, 0.25, vol * 0.35, [["highpass", 7000]]); return;
+      case "C": noiseHit(rig, out, start, 1.2, vol * 0.45, [["highpass", 5000]]); return;
+      case "T": sweep(rig, out, start, 180, 80, 0.2, 0.25, vol * 1.2); return;
+    }
+  }
+
+  function scheduleSection(rig, sec, t, spb) {
+    for (const [name, events] of Object.entries(sec.tracks)) {
+      const track = rig.trackFor(name);
+      let et = t;
+      for (const ev of events) {
+        const dur = ev.beats * spb;
+        if (ev.pitch !== "R") {
+          if (track.inst.drums) playDrum(rig, track, ev.pitch, et);
+          else playTone(rig, track, noteToFreq(ev.pitch), et, dur);
+        }
+        et += dur;
+      }
+    }
+    return t + sec.beats * spb;
+  }
+
+  const LOOKAHEAD = 2.5; // seconds of audio scheduled ahead of the play head
+
   class RetroPlayer {
     constructor() {
       this.ctx = null;
@@ -145,11 +469,6 @@
       if (this.ctx) return;
       const AC = global.AudioContext || global.webkitAudioContext;
       this.ctx = new AC();
-      // One second of white noise, reused for snare / hi-hat.
-      const len = this.ctx.sampleRate;
-      this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-      const data = this.noise.getChannelData(0);
-      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     }
 
     get playing() { return this.master !== null; }
@@ -163,53 +482,35 @@
       if (id !== this.playId) return;
 
       const sections = compileSong(song);
-      const instruments = resolveInstruments(song);
-
-      this.master = this.ctx.createGain();
-      this.master.gain.value = song.volume ?? 0.8;
-      this.master.connect(this.ctx.destination);
+      const rig = buildRig(this.ctx, song, this.ctx.destination);
+      this.master = rig.master;
       const master = this.master;
 
       const spb = 60 / song.bpm; // seconds per beat
       const loopIndex = Math.max(0, song.arrangement.indexOf(song.loopFrom));
+      let index = 0;
+      let t = this.ctx.currentTime + 0.1;
 
-      const schedulePass = (fromIndex, startTime) => {
-        let t = startTime;
-        for (const name of song.arrangement.slice(fromIndex)) {
-          const sec = sections[name];
-          for (const [track, events] of Object.entries(sec.tracks)) {
-            const inst = instruments[track] || DEFAULT_INSTRUMENTS.lead;
-            let et = t;
-            for (const ev of events) {
-              const dur = ev.beats * spb;
-              if (ev.pitch !== "R") {
-                if (inst.drums) this._drum(master, ev.pitch, et, inst.volume);
-                else this._tone(master, noteToFreq(ev.pitch), et, dur, inst.wave, inst.volume);
-              }
-              et += dur;
+      // Schedules a section at a time, a little ahead of the play head, so
+      // long or dense songs don't create thousands of nodes up front.
+      const step = () => {
+        if (this.master !== master) return;
+        while (t < this.ctx.currentTime + LOOKAHEAD) {
+          if (index >= song.arrangement.length) {
+            if (!loop) {
+              const ms = (t + rig.reverbTail - this.ctx.currentTime) * 1000;
+              this.timer = setTimeout(() => {
+                if (this.master === master) { this.stop(); onEnd && onEnd(); }
+              }, Math.max(0, ms));
+              return;
             }
+            index = loopIndex;
           }
-          t += sec.beats * spb;
+          t = scheduleSection(rig, sections[song.arrangement[index++]], t, spb);
         }
-        return t;
+        this.timer = setTimeout(step, 250);
       };
-
-      const runFrom = (index, start) => {
-        const end = schedulePass(index, start);
-        const msUntilEnd = (end - this.ctx.currentTime) * 1000;
-        if (loop) {
-          // Queue the next pass shortly before this one finishes.
-          this.timer = setTimeout(() => {
-            if (this.master === master) runFrom(loopIndex, end);
-          }, Math.max(0, msUntilEnd - 1000));
-        } else {
-          this.timer = setTimeout(() => {
-            if (this.master === master) { this.stop(); onEnd && onEnd(); }
-          }, msUntilEnd);
-        }
-      };
-
-      runFrom(0, this.ctx.currentTime + 0.1);
+      step();
     }
 
     stop() {
@@ -222,49 +523,57 @@
       }
     }
 
-    _tone(out, freq, start, dur, wave, vol) {
-      const ctx = this.ctx;
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = wave;
-      osc.frequency.value = freq;
-      const end = start + dur * 0.92;
-      g.gain.setValueAtTime(0, start);
-      g.gain.linearRampToValueAtTime(vol, start + 0.005);
-      g.gain.linearRampToValueAtTime(vol * 0.7, start + Math.min(0.06, dur * 0.3));
-      g.gain.linearRampToValueAtTime(0.0001, end);
-      osc.connect(g).connect(out);
-      osc.start(start);
-      osc.stop(end + 0.02);
-    }
+    // Renders the song offline to a stereo AudioBuffer: one full pass, plus
+    // `passes - 1` more from loopFrom, plus the reverb tail.
+    static async render(song, { passes = 1, sampleRate = 44100 } = {}) {
+      const sections = compileSong(song);
+      const spb = 60 / song.bpm;
+      const loopIndex = Math.max(0, song.arrangement.indexOf(song.loopFrom));
+      const order = [...song.arrangement];
+      for (let p = 1; p < passes; p++) order.push(...song.arrangement.slice(loopIndex));
+      const seconds = order.reduce((s, n) => s + sections[n].beats * spb, 0);
+      const tail = song.reverb ? (song.reverb.seconds ?? 2) : 0.3;
 
-    _drum(out, type, start, vol) {
-      const ctx = this.ctx;
-      if (type === "K") {
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.frequency.setValueAtTime(150, start);
-        osc.frequency.exponentialRampToValueAtTime(40, start + 0.12);
-        g.gain.setValueAtTime(vol * 1.6, start);
-        g.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
-        osc.connect(g).connect(out);
-        osc.start(start);
-        osc.stop(start + 0.16);
-        return;
-      }
-      const src = ctx.createBufferSource();
-      src.buffer = this.noise;
-      const hp = ctx.createBiquadFilter();
-      hp.type = "highpass";
-      hp.frequency.value = type === "H" ? 7000 : 1200;
-      const g = ctx.createGain();
-      const len = type === "H" ? 0.04 : 0.12;
-      g.gain.setValueAtTime(type === "H" ? vol * 0.4 : vol, start);
-      g.gain.exponentialRampToValueAtTime(0.001, start + len);
-      src.connect(hp).connect(g).connect(out);
-      src.start(start);
-      src.stop(start + len + 0.01);
+      const OAC = global.OfflineAudioContext || global.webkitOfflineAudioContext;
+      const ctx = new OAC(2, Math.ceil((seconds + tail + 0.1) * sampleRate), sampleRate);
+      const rig = buildRig(ctx, song, ctx.destination);
+      let t = 0.05;
+      for (const name of order) t = scheduleSection(rig, sections[name], t, spb);
+      return ctx.startRendering();
     }
+  }
+
+  // 16-bit PCM WAV file from an AudioBuffer.
+  function encodeWav(buffer) {
+    const channels = buffer.numberOfChannels;
+    const frames = buffer.length;
+    const bytes = new ArrayBuffer(44 + frames * channels * 2);
+    const view = new DataView(bytes);
+    const text = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+    text(0, "RIFF");
+    view.setUint32(4, 36 + frames * channels * 2, true);
+    text(8, "WAVE");
+    text(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, channels, true);
+    view.setUint32(24, buffer.sampleRate, true);
+    view.setUint32(28, buffer.sampleRate * channels * 2, true);
+    view.setUint16(32, channels * 2, true);
+    view.setUint16(34, 16, true);
+    text(36, "data");
+    view.setUint32(40, frames * channels * 2, true);
+    const data = [];
+    for (let c = 0; c < channels; c++) data.push(buffer.getChannelData(c));
+    let off = 44;
+    for (let i = 0; i < frames; i++) {
+      for (let c = 0; c < channels; c++) {
+        const s = Math.max(-1, Math.min(1, data[c][i]));
+        view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        off += 2;
+      }
+    }
+    return bytes;
   }
 
   // Simple registry so song files can add themselves.
@@ -279,9 +588,10 @@
 
   RetroPlayer.compileSong = compileSong;
   RetroPlayer.describeSong = describeSong;
+  RetroPlayer.encodeWav = encodeWav;
   global.RetroPlayer = RetroPlayer;
   global.RetroSongs = RetroSongs;
   if (typeof module !== "undefined") {
-    module.exports = { RetroPlayer, RetroSongs, compileSong, describeSong, parseTrack, noteToFreq };
+    module.exports = { RetroPlayer, RetroSongs, compileSong, describeSong, parseTrack, noteToFreq, encodeWav };
   }
 })(typeof window !== "undefined" ? window : globalThis);

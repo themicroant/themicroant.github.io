@@ -14,7 +14,8 @@
  *
  * Instruments default to raw chip voices (NES-like). Songs can opt into a richer,
  * N64-like sound per instrument: envelopes, detuned voices, custom harmonics,
- * vibrato, drive, filters, stereo pan, reverb and a "studio" drum kit.
+ * vibrato, drive, filters, stereo pan, reverb and a "studio" drum kit, or a
+ * Sega Genesis-like one: 2-operator FM synthesis and bit-crushed (lo-fi) tracks.
  *
  * Full reference: docs/song-format.md
  */
@@ -102,6 +103,15 @@
     checkNumber(inst.drive, 0, 1, "drive", bad);
     checkNumber(inst.detune, 0, 100, "detune", bad);
     checkNumber(inst.gate, 0.05, 1, "gate", bad);
+    if (inst.bits !== undefined && !(Number.isInteger(inst.bits) && inst.bits >= 2 && inst.bits <= 16)) {
+      bad("bits must be a whole number from 2 to 16");
+    }
+    if (inst.fm) {
+      checkNumber(inst.fm.ratio, 0.01, 32, "fm.ratio", bad);
+      checkNumber(inst.fm.index, 0, 50, "fm.index", bad);
+      checkNumber(inst.fm.indexEnd, 0, 50, "fm.indexEnd", bad);
+      checkNumber(inst.fm.decay, 0.001, 10, "fm.decay", bad);
+    }
     if (inst.voices !== undefined && !(Number.isInteger(inst.voices) && inst.voices >= 1 && inst.voices <= 6)) {
       bad("voices must be a whole number from 1 to 6");
     }
@@ -226,6 +236,18 @@
     return curve;
   }
 
+  // Staircase curve: reduces the signal to 2^bits levels, like a low-bit sample.
+  function crushCurve(bits) {
+    const steps = Math.pow(2, bits - 1);
+    const n = 4096;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1;
+      curve[i] = Math.round(x * steps) / steps;
+    }
+    return curve;
+  }
+
   // Builds the mixer for one song: a chain per track (drive, filter, pan, reverb
   // send) feeding a master bus (optional lowpass and compressor) into `destination`.
   // Tracks with no extra options get a plain gain, so chip songs sound as before.
@@ -267,14 +289,28 @@
       const inst = instruments[name] || DEFAULT_INSTRUMENTS.lead;
       const input = ctx.createGain();
       let out = input;
+      // Drive and bit-crushing work on a full-level signal, so notes on those tracks
+      // play at a fixed base level and a gain after the effect sets the track volume.
       const drive = !inst.drums && inst.drive > 0;
+      const unit = drive || inst.bits > 0;
+      const base = inst.drums ? 0.5 : 1;
       if (drive) {
         const shaper = ctx.createWaveShaper();
         shaper.curve = driveCurve(inst.drive);
         shaper.oversample = "2x";
+        out.connect(shaper);
+        out = shaper;
+      }
+      if (inst.bits) {
+        const crush = ctx.createWaveShaper();
+        crush.curve = crushCurve(inst.bits);
+        out.connect(crush);
+        out = crush;
+      }
+      if (unit) {
         const post = ctx.createGain();
-        post.gain.value = inst.volume;
-        out.connect(shaper).connect(post);
+        post.gain.value = inst.volume / base;
+        out.connect(post);
         out = post;
       }
       if (inst.filter) {
@@ -303,9 +339,9 @@
         const imag = new Float32Array([0, ...inst.harmonics]);
         wave = ctx.createPeriodicWave(new Float32Array(imag.length), imag);
       }
-      // Driven tracks are driven at full level; the post-drive gain sets their volume.
-      const level = (drive ? 1 : inst.volume) / Math.sqrt(inst.voices || 1);
-      return (tracks[name] = { inst, input, wave, level });
+      const level = (unit ? base : inst.volume) / Math.sqrt(inst.voices || 1);
+      const drumLevel = unit ? base : inst.volume;
+      return (tracks[name] = { inst, input, wave, level, drumLevel });
     };
 
     return { ctx, master, trackFor, noise: noiseBuffer(ctx), reverbTail: song.reverb ? (song.reverb.seconds ?? 2) : 0 };
@@ -349,6 +385,24 @@
       lfo.stop(stopAt);
     }
 
+    // 2-operator FM: a sine modulator wobbles the carrier's frequency. The index
+    // (modulation depth) can fall from `index` to `indexEnd`, the classic FM
+    // "pluck" that makes Genesis slap bass and brass.
+    let modGain = null;
+    if (inst.fm) {
+      const { ratio = 1, index = 2, decay = 0.2 } = inst.fm;
+      const indexEnd = inst.fm.indexEnd ?? index;
+      const modFreq = freq * ratio;
+      const mod = ctx.createOscillator();
+      mod.frequency.value = modFreq;
+      modGain = ctx.createGain();
+      modGain.gain.setValueAtTime(index * modFreq, start);
+      if (indexEnd !== index) modGain.gain.setTargetAtTime(indexEnd * modFreq, start, decay / 3);
+      mod.connect(modGain);
+      mod.start(start);
+      mod.stop(stopAt);
+    }
+
     const voices = inst.voices || 1;
     for (let v = 0; v < voices; v++) {
       const osc = ctx.createOscillator();
@@ -357,6 +411,7 @@
       osc.frequency.value = freq;
       if (voices > 1) osc.detune.value = (inst.detune || 0) * ((2 * v) / (voices - 1) - 1);
       if (lfoGain) lfoGain.connect(osc.detune);
+      if (modGain) modGain.connect(osc.frequency);
       osc.connect(g);
       osc.start(start);
       osc.stop(stopAt);
@@ -402,7 +457,7 @@
 
   function playDrum(rig, track, type, start) {
     const out = track.input;
-    const vol = track.inst.volume;
+    const vol = track.drumLevel;
     if (track.inst.kit === "studio") {
       // Fuller, sample-like kit: layered bodies, clicks and longer cymbals.
       switch (type) {

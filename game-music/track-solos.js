@@ -37,14 +37,27 @@
       ["no reverb, 1 voice, no filter", { ...inst, voices: 1, detune: 0, filter: undefined }],
       ["plain sine", { wave: "sine", volume: 0.008, env: inst.env, gate: inst.gate }],
     ];
-    steps.forEach(([label, override], i) => RetroSongs.register({
+    // Tests 5-8 each change one thing from test 3 (a bare sawtooth), to tell apart aliasing,
+    // chords, the envelope and loudness as the source of static.
+    const bare = { ...inst, voices: 1, detune: 0, filter: undefined };
+    const topNote = (text) => text.replace(/(^|\s)([^\s+\/|\[\]]+)(?:\+[^\s\/]+)+\//g, "$1$2/");
+    const oneNote = Object.fromEntries(Object.entries(sections).map(([n, sec]) =>
+      [n, { ...sec, [track]: topNote(sec[track]) }]));
+    steps.push(
+      ["sawtooth with only 12 harmonics", { ...bare, wave: undefined,
+        harmonics: Array.from({ length: 12 }, (_, i) => 1 / (i + 1)) }],
+      ["one note instead of a chord", bare, oneNote],
+      ["chip envelope instead of the N64 one", { ...bare, env: undefined, gate: 0.97 }],
+      ["4x louder", { ...bare, volume: bare.volume * 4 }],
+    );
+    steps.forEach(([label, override, secs], i) => RetroSongs.register({
       ...song,
       reverb: undefined,
       master: undefined,
       instruments: { ...song.instruments, [track]: override },
       id: `${song.id}--${track}--test${i + 1}`,
       title: `${song.title.replace(/ \(.*\)$/, "")} › ${track} test ${i + 1}: ${label}`,
-      sections,
+      sections: secs || sections,
     }));
   }
 })();

@@ -14,6 +14,18 @@
  *   twin2   the twin lead again; only the last bar changes, turning back into B
  * Loops from twin, so the intro plays once. Design notes: docs/song-notes.md
  */
+// The braces keep these names private to this file: every song shares one page.
+{
+const { transpose } = RetroSongs;
+
+// The melody, bars 1–3, and its twin a diatonic third below. Bar 4 changes per section.
+const THEME = "B4/8 D5/8 F#5/4. E5/8 D5/8 E5/8 | G5/4. F#5/8 E5/8 D5/8 B4/4 | A4/8 D5/8 F#5/4. E5/8 D5/8 F#5/8";
+const THEME_TWIN = "F#4/8 B4/8 D5/4. C#5/8 B4/8 C#5/8 | E5/4. D5/8 C#5/8 B4/8 G4/4 | F#4/8 A4/8 D5/4. C#5/8 B4/8 D5/8";
+// Galloping chugs under the twin leads.
+const GALLOP = "[B2/16 B2/16 B2/8]x3 D3/8 C#3/8 | [G2/16 G2/16 G2/8]x3 A2/8 B2/8 | [D3/16 D3/16 D3/8]x3 E3/8 F#3/8 | [F#2/16 F#2/16 F#2/8]x3 A2/8 A#2/8";
+// The stop-start riff; the bass doubles it an octave down.
+const RIFF = "B2/8 B2/8 R/16 B2/16 B2/8 D3/8 R/16 B2/16 C#3/8 D3/8 | G2/8 G2/8 R/16 G2/16 G2/8 B2/8 R/16 G2/16 A2/8 B2/8 | D3/8 D3/8 R/16 D3/16 D3/8 F#3/8 R/16 D3/16 E3/8 F#3/8 | F#2/8 F#2/8 R/16 F#2/16 F#2/8 [F#2/16]x4 A2/8 A#2/8";
+
 RetroSongs.register({
   id: "ashen-horizon",
   title: "Ashen Horizon (Melodic Death Metal)",
@@ -30,7 +42,7 @@ RetroSongs.register({
   sections: {
     // Quiet start: clean arpeggios and a soft bell playing the lead melody once.
     intro: {
-      bell:  "B4/8 D5/8 F#5/4. E5/8 D5/8 E5/8 | G5/4. F#5/8 E5/8 D5/8 B4/4 | A4/8 D5/8 F#5/4. E5/8 D5/8 F#5/8 | E5/4 C#5/4 A#4/2",
+      bell:  `${THEME} | E5/4 C#5/4 A#4/2`,
       clean: "B3/8 F#4/8 B4/8 D5/8 F#5/8 D5/8 B4/8 F#4/8 | G3/8 D4/8 G4/8 B4/8 D5/8 B4/8 G4/8 D4/8 | D4/8 A4/8 D5/8 F#5/8 A5/8 F#5/8 D5/8 A4/8 | F#3/8 C#4/8 F#4/8 A#4/8 C#5/8 A#4/8 F#4/8 C#4/8",
       bass:  "B1/1 | G2/1 | D2/1 | F#2/1",
       drums: "R/1 | R/1 | R/1 | R/2 [S/16]x8",
@@ -38,9 +50,9 @@ RetroSongs.register({
 
     // Twin leads a diatonic third apart over Bm | G | D | F#; galloping chugs underneath.
     twin: {
-      lead:   "B4/8 D5/8 F#5/4. E5/8 D5/8 E5/8 | G5/4. F#5/8 E5/8 D5/8 B4/4 | A4/8 D5/8 F#5/4. E5/8 D5/8 F#5/8 | E5/4 C#5/4 A#4/2",
-      twin:   "F#4/8 B4/8 D5/4. C#5/8 B4/8 C#5/8 | E5/4. D5/8 C#5/8 B4/8 G4/4 | F#4/8 A4/8 D5/4. C#5/8 B4/8 D5/8 | C#5/4 A#4/4 F#4/2",
-      guitar: "[B2/16 B2/16 B2/8]x3 D3/8 C#3/8 | [G2/16 G2/16 G2/8]x3 A2/8 B2/8 | [D3/16 D3/16 D3/8]x3 E3/8 F#3/8 | [F#2/16 F#2/16 F#2/8]x3 A2/8 A#2/8",
+      lead:   `${THEME} | E5/4 C#5/4 A#4/2`,
+      twin:   `${THEME_TWIN} | C#5/4 A#4/4 F#4/2`,
+      guitar: GALLOP,
       bass:   "[B1/8]x8 | [G2/8]x8 | [D2/8]x8 | [F#2/8]x6 A2/8 A#2/8",
       drums:  "[[K/16]x8 S/8 K/16 K/16 [K/16]x4]x3 | [K/16]x8 [S/16]x8",
     },
@@ -48,19 +60,20 @@ RetroSongs.register({
     // Stop-start riff with the lead out; a held keyboard line keeps the melancholy.
     heavy: {
       harmony: "F#5/1 | D5/1 | F#5/1 | E5/2 C#5/2",
-      guitar:  "B2/8 B2/8 R/16 B2/16 B2/8 D3/8 R/16 B2/16 C#3/8 D3/8 | G2/8 G2/8 R/16 G2/16 G2/8 B2/8 R/16 G2/16 A2/8 B2/8 | D3/8 D3/8 R/16 D3/16 D3/8 F#3/8 R/16 D3/16 E3/8 F#3/8 | F#2/8 F#2/8 R/16 F#2/16 F#2/8 [F#2/16]x4 A2/8 A#2/8",
-      bass:    "B1/8 B1/8 R/16 B1/16 B1/8 D2/8 R/16 B1/16 C#2/8 D2/8 | G1/8 G1/8 R/16 G1/16 G1/8 B1/8 R/16 G1/16 A1/8 B1/8 | D2/8 D2/8 R/16 D2/16 D2/8 F#2/8 R/16 D2/16 E2/8 F#2/8 | F#1/8 F#1/8 R/16 F#1/16 F#1/8 [F#1/16]x4 A1/8 A#1/8",
+      guitar:  RIFF,
+      bass:    transpose(RIFF, -12),
       drums:   "[K/8 K/16 K/16 S/8 K/8]x6 | K/8 K/16 K/16 S/8 K/8 [S/16]x8",
     },
 
     // Twin lead again; the last bar climbs and falls back to B for the loop.
     twin2: {
-      lead:    "B4/8 D5/8 F#5/4. E5/8 D5/8 E5/8 | G5/4. F#5/8 E5/8 D5/8 B4/4 | A4/8 D5/8 F#5/4. E5/8 D5/8 F#5/8 | E5/8 F#5/8 G5/8 F#5/8 E5/8 C#5/8 B4/4",
-      twin:    "F#4/8 B4/8 D5/4. C#5/8 B4/8 C#5/8 | E5/4. D5/8 C#5/8 B4/8 G4/4 | F#4/8 A4/8 D5/4. C#5/8 B4/8 D5/8 | C#5/8 D5/8 E5/8 D5/8 C#5/8 A#4/8 F#4/4",
+      lead:    `${THEME} | E5/8 F#5/8 G5/8 F#5/8 E5/8 C#5/8 B4/4`,
+      twin:    `${THEME_TWIN} | C#5/8 D5/8 E5/8 D5/8 C#5/8 A#4/8 F#4/4`,
       harmony: "[B4/16 D5/16 F#5/16 D5/16]x4 | [G4/16 B4/16 D5/16 B4/16]x4 | [A4/16 D5/16 F#5/16 D5/16]x4 | [F#4/16 A#4/16 C#5/16 A#4/16]x4",
-      guitar:  "[B2/16 B2/16 B2/8]x3 D3/8 C#3/8 | [G2/16 G2/16 G2/8]x3 A2/8 B2/8 | [D3/16 D3/16 D3/8]x3 E3/8 F#3/8 | [F#2/16 F#2/16 F#2/8]x3 A2/8 A#2/8",
+      guitar:  GALLOP,
       bass:    "[B1/8 B2/8]x4 | [G1/8 G2/8]x4 | [D2/8 D3/8]x4 | [F#1/8 F#2/8]x3 A1/8 A#1/8",
       drums:   "[[K/16]x8 S/8 K/16 K/16 [K/16]x4]x3 | [K/16]x4 [S/16]x8 K/8 S/8",
     },
   },
 });
+}

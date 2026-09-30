@@ -6,11 +6,15 @@
  * Song notation (one string per track, per section):
  *   A4/8    note A4, eighth note        (/1 whole, /2 half, /4 quarter, /8, /16, /32)
  *   C#5/4.  dotted quarter              (trailing "." = x1.5)
+ *   A4/8t   triplet eighth              (trailing "t" = x2/3; three /8t = one beat)
+ *   B2+F#3/8  chord: notes joined by "+", one duration
+ *   A4/2~   tie: the note carries on into the next token, which must be the same note(s)
  *   R/4     rest
- *   K S H   drums: kick, snare, hi-hat  (drum tracks only)
+ *   K S H   drums: kick, snare, hi-hat  (drum tracks only; K+C/4 hits both)
  *   O C T   drums: open hi-hat, crash, tom
  *   [ ... ]x4   repeat the bracketed tokens 4 times
- *   |       bar line (ignored, just for readability)
+ *   |       bar line. Checked: every bar line must fall on a bar boundary
+ *           (4 beats, or the song's / section's timeSig)
  *
  * Instruments default to raw chip voices (NES-like). Songs can opt into a richer,
  * N64-like sound per instrument: envelopes, detuned voices, custom harmonics,
@@ -55,19 +59,111 @@
     return str;
   }
 
-  function parseTrack(str) {
+  const EPSILON = 1e-6; // triplets make beat counts like 1/3, so compare with a tolerance
+  const fmtBeats = (b) => String(Math.round(b * 1000) / 1000);
+
+  // Tokens and bar lines, before ties are joined:
+  // [{ bar: true } | { notes: ["B2", "F#3"], beats, tie }]. A rest has no notes.
+  function lexTrack(str) {
     return expandRepeats(str)
-      .replace(/\|/g, " ")
+      .replace(/\|/g, " | ")
+      .replace(/~/g, "~ ")
       .trim()
       .split(/\s+/)
       .filter(Boolean)
       .map((tok) => {
-        const m = /^([^/]+)\/(1|2|4|8|16|32)(\.?)$/.exec(tok);
+        if (tok === "|") return { bar: true };
+        const m = /^([^/]+)\/(1|2|4|8|16|32)([.t]?)(~?)$/.exec(tok);
         if (!m) throw new Error(`Bad token "${tok}"`);
         let beats = 4 / Number(m[2]);
-        if (m[3]) beats *= 1.5;
-        return { pitch: m[1], beats };
+        if (m[3] === ".") beats *= 1.5;
+        if (m[3] === "t") beats *= 2 / 3;
+        const notes = m[1] === "R" ? [] : m[1].split("+");
+        if (notes.some((n) => !n)) throw new Error(`Bad chord "${tok}"`);
+        if (m[4] && !notes.length) throw new Error(`Can't tie a rest ("${tok}")`);
+        return { notes, beats, tie: Boolean(m[4]) };
       });
+  }
+
+  // Joins tied tokens into one longer note and drops bar lines.
+  function joinTies(items) {
+    const events = [];
+    let tied = false;
+    for (const { bar, notes, beats, tie } of items) {
+      if (bar) continue;
+      const prev = events[events.length - 1];
+      if (tied) {
+        const from = prev.notes.join("+");
+        if (notes.join("+") !== from) {
+          throw new Error(`Tie "~" from ${from} must go into the same note, not ${notes.join("+") || "R"}`);
+        }
+        prev.beats += beats;
+      } else {
+        events.push({ notes, beats });
+      }
+      tied = tie;
+    }
+    if (tied) throw new Error(`Tie "~" at the end of the track has nothing to tie into`);
+    return events;
+  }
+
+  // Track text -> [{ notes, beats }], with repeats expanded and ties joined.
+  function parseTrack(str) {
+    return joinTies(lexTrack(str));
+  }
+
+  // Every bar line must land on a bar boundary, and the track must end on one.
+  // A stretch between bar lines may hold several whole bars (e.g. "[K/8 S/8]x8"),
+  // never a bar and a half. Returns an error message, or null.
+  function checkBars(items, barBeats) {
+    let pos = 0;
+    let start = 0;
+    let bar = 1;
+    const close = () => {
+      const len = pos - start;
+      if (len < EPSILON) return null;
+      const count = Math.max(1, Math.round(len / barBeats));
+      if (Math.abs(len - count * barBeats) > EPSILON) {
+        return count === 1
+          ? `bar ${bar} is ${fmtBeats(len)} beats, expected ${fmtBeats(barBeats)}`
+          : `bars ${bar}–${bar + count - 1} are ${fmtBeats(len)} beats, expected ${fmtBeats(count * barBeats)} (${fmtBeats(barBeats)} per bar); is a "|" missing or misplaced?`;
+      }
+      bar += count;
+      start = pos;
+      return null;
+    };
+    for (const item of items) {
+      if (item.bar) {
+        const err = close();
+        if (err) return err;
+      } else {
+        pos += item.beats;
+      }
+    }
+    return close();
+  }
+
+  // Beats (quarter notes) per bar from a time signature: "3/4" -> 3, "6/8" -> 3, "7/8" -> 3.5.
+  function barLength(timeSig) {
+    if (timeSig === undefined) return 4;
+    const m = /^(\d+)\/(1|2|4|8|16|32)$/.exec(String(timeSig));
+    if (!m || Number(m[1]) < 1) throw new Error(`timeSig "${timeSig}" should look like "4/4", "3/4" or "6/8"`);
+    return (Number(m[1]) * 4) / Number(m[2]);
+  }
+
+  const SHARPS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const FLATS  = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+
+  // Shifts every note in track text by `semitones`, leaving durations, rests and
+  // drums alone: transpose("A4/8 C#5/4", 12) -> "A5/8 C#6/4". Flats stay flats.
+  function transpose(str, semitones) {
+    if (!Number.isInteger(semitones)) throw new Error(`transpose: semitones must be a whole number, got ${semitones}`);
+    return str.replace(/(^|[\s\[|+~])([A-G])([#b]?)(-?\d)(?=[/+])/g, (_, before, letter, acc, octave) => {
+      const semi = NOTE_INDEX[letter] + (acc === "#" ? 1 : acc === "b" ? -1 : 0);
+      const midi = (Number(octave) + 1) * 12 + semi + semitones;
+      const name = (acc === "b" ? FLATS : SHARPS)[((midi % 12) + 12) % 12];
+      return `${before}${name}${Math.floor(midi / 12) - 1}`;
+    });
   }
 
   // Defaults merged with the song's per-track overrides.
@@ -131,9 +227,10 @@
     }
   }
 
-  // Turns song data into { sectionName: { tracks: { trackName: [events] }, beats } }.
-  // Throws on anything that would play wrong: tracks of different lengths within
-  // a section, unknown sections, bad notes, drum hits on a melodic track, etc.
+  // Turns song data into { sectionName: { tracks: { trackName: [events] }, beats, barBeats } }.
+  // Throws on anything that would play wrong: bars of the wrong length, tracks of
+  // different lengths within a section, unknown sections, bad notes, drum hits on a
+  // melodic track, etc.
   function compileSong(song) {
     const label = song.title || song.id || "(untitled song)";
     const fail = (msg) => { throw new Error(`${label}: ${msg}`); };
@@ -147,34 +244,48 @@
       checkNumber(song.reverb.send, 0, 1, "reverb.send", fail);
     }
     if (song.master) checkNumber(song.master.lowpass, 20, 20000, "master.lowpass", fail);
+    let songBar;
+    try { songBar = barLength(song.timeSig); } catch (e) { fail(e.message); }
 
     const instruments = resolveInstruments(song);
     for (const [name, inst] of Object.entries(instruments)) checkInstrument(name, inst, fail);
 
     const sections = {};
-    for (const [name, tracks] of Object.entries(song.sections || {})) {
+    for (const [name, { timeSig, ...tracks }] of Object.entries(song.sections || {})) {
+      let barBeats = songBar;
+      if (timeSig !== undefined) {
+        try { barBeats = barLength(timeSig); } catch (e) { fail(`section "${name}": ${e.message}`); }
+      }
       const parsed = {};
       let beats = null;
       for (const [track, text] of Object.entries(tracks)) {
-        let events;
-        try { events = parseTrack(text); } catch (e) { fail(`section "${name}" track "${track}": ${e.message}`); }
+        const where = `section "${name}" track "${track}"`;
+        let items, events;
+        try {
+          items = lexTrack(text);
+          events = joinTies(items);
+        } catch (e) { fail(`${where}: ${e.message}`); }
         const inst = instruments[track] || DEFAULT_INSTRUMENTS.lead;
+        if (inst.drums && items.some((it) => it.tie)) fail(`${where}: drum hits can't be tied with "~"`);
         for (const ev of events) {
-          if (ev.pitch === "R") continue;
-          if (inst.drums) {
-            if (!DRUMS.has(ev.pitch)) fail(`section "${name}" track "${track}": "${ev.pitch}" is not a drum (K, S, H, O, C, T)`);
-          } else {
-            try { noteToFreq(ev.pitch); } catch (e) { fail(`section "${name}" track "${track}": ${e.message}`); }
+          for (const note of ev.notes) {
+            if (inst.drums) {
+              if (!DRUMS.has(note)) fail(`${where}: "${note}" is not a drum (K, S, H, O, C, T)`);
+            } else {
+              try { noteToFreq(note); } catch (e) { fail(`${where}: ${e.message}`); }
+            }
           }
         }
+        const barError = checkBars(items, barBeats);
+        if (barError) fail(`${where}: ${barError}`);
         const len = events.reduce((s, e) => s + e.beats, 0);
         if (beats === null) beats = len;
-        else if (Math.abs(len - beats) > 1e-6) {
-          fail(`section "${name}" track "${track}" is ${len} beats, expected ${beats}`);
+        else if (Math.abs(len - beats) > EPSILON) {
+          fail(`${where} is ${fmtBeats(len)} beats, expected ${fmtBeats(beats)}`);
         }
         parsed[track] = events;
       }
-      sections[name] = { tracks: parsed, beats: beats || 0 };
+      sections[name] = { tracks: parsed, beats: beats || 0, barBeats };
     }
     for (const s of song.arrangement) {
       if (!sections[s]) fail(`unknown section "${s}"`);
@@ -189,10 +300,11 @@
   function describeSong(song) {
     const sections = compileSong(song);
     const beats = song.arrangement.reduce((b, n) => b + sections[n].beats, 0);
+    const bars = song.arrangement.reduce((b, n) => b + sections[n].beats / sections[n].barBeats, 0);
     return {
       sections: Object.fromEntries(Object.entries(sections).map(([k, v]) => [k, v.beats])),
       beats,
-      bars: beats / 4,
+      bars: Math.round(bars * 1000) / 1000,
       seconds: (beats * 60) / song.bpm,
     };
   }
@@ -500,9 +612,9 @@
       let et = t;
       for (const ev of events) {
         const dur = ev.beats * spb;
-        if (ev.pitch !== "R") {
-          if (track.inst.drums) playDrum(rig, track, ev.pitch, et);
-          else playTone(rig, track, noteToFreq(ev.pitch), et, dur);
+        for (const note of ev.notes) {
+          if (track.inst.drums) playDrum(rig, track, note, et);
+          else playTone(rig, track, noteToFreq(note), et, dur);
         }
         et += dur;
       }
@@ -632,8 +744,10 @@
   }
 
   // Simple registry so song files can add themselves.
+  // Song files can use the helpers too: const { transpose } = RetroSongs;
   const RetroSongs = {
     list: [],
+    transpose,
     register(song) {
       compileSong(song);
       if (this.list.some((s) => s.id === song.id)) throw new Error(`Duplicate song id "${song.id}"`);
@@ -647,6 +761,6 @@
   global.RetroPlayer = RetroPlayer;
   global.RetroSongs = RetroSongs;
   if (typeof module !== "undefined") {
-    module.exports = { RetroPlayer, RetroSongs, compileSong, describeSong, parseTrack, noteToFreq, encodeWav };
+    module.exports = { RetroPlayer, RetroSongs, compileSong, describeSong, parseTrack, transpose, noteToFreq, encodeWav };
   }
 })(typeof window !== "undefined" ? window : globalThis);

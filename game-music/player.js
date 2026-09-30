@@ -472,8 +472,10 @@
       g.gain.setValueAtTime(0, start);
       g.gain.linearRampToValueAtTime(level, start + a);
       g.gain.setTargetAtTime(level * s, start + a, Math.max(d, 0.001) / 3);
-      g.gain.setTargetAtTime(0, off, Math.max(r, 0.001) / 4);
-      stopAt = off + r + 0.05;
+      // Fade to silence (under -80 dB) before the oscillators stop. Stopping any earlier cuts
+      // long pads and choirs off at ~1.5% level, a click at every chord change.
+      g.gain.setTargetAtTime(0, off, Math.max(r, 0.001) / 5);
+      stopAt = off + 2 * r + 0.03;
     } else {
       // The original chip envelope: quick attack, short decay, fade over the note.
       const end = start + dur * gate;
@@ -636,7 +638,9 @@
     _init() {
       if (this.ctx) return;
       const AC = global.AudioContext || global.webkitAudioContext;
-      this.ctx = new AC();
+      // "playback" asks for larger audio buffers: a little more start-up delay, but far fewer
+      // dropouts (heard as crackle or static) when a dense song strains the audio thread.
+      try { this.ctx = new AC({ latencyHint: "playback" }); } catch (e) { this.ctx = new AC(); }
     }
 
     get playing() { return this.master !== null; }

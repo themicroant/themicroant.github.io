@@ -155,10 +155,11 @@
   const FLATS  = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
 
   // Shifts every note in track text by `semitones`, leaving durations, rests and
-  // drums alone: transpose("A4/8 C#5/4", 12) -> "A5/8 C#6/4". Flats stay flats.
+  // drums alone: transpose("A4/8 C#5/4", 12) -> "A5/8 C#6/4". Flats stay flats. Bare notes
+  // and chords without a duration work too: transpose("C4+E4+G4", 2) -> "D4+F#4+A4".
   function transpose(str, semitones) {
     if (!Number.isInteger(semitones)) throw new Error(`transpose: semitones must be a whole number, got ${semitones}`);
-    return str.replace(/(^|[\s\[|+~])([A-G])([#b]?)(-?\d)(?=[/+])/g, (_, before, letter, acc, octave) => {
+    return str.replace(/(^|[\s\[|+~])([A-G])([#b]?)(-?\d)(?=$|[/+~|\]\s])/g, (_, before, letter, acc, octave) => {
       const semi = NOTE_INDEX[letter] + (acc === "#" ? 1 : acc === "b" ? -1 : 0);
       const midi = (Number(octave) + 1) * 12 + semi + semitones;
       const name = (acc === "b" ? FLATS : SHARPS)[((midi % 12) + 12) % 12];
@@ -285,7 +286,7 @@
         }
         parsed[track] = events;
       }
-      sections[name] = { tracks: parsed, beats: beats || 0, barBeats };
+      sections[name] = { tracks: parsed, beats: Math.round((beats || 0) * 1e6) / 1e6, barBeats };
     }
     for (const s of song.arrangement) {
       if (!sections[s]) fail(`unknown section "${s}"`);

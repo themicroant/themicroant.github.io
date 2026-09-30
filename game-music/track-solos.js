@@ -23,6 +23,28 @@
         title: `${song.title.replace(/ \(.*\)$/, "")} › ${track} (solo)`,
         sections,
       });
+      if (song.id === "lanternwood" && track === "pad") addLadder(song, track, sections);
     }
+  }
+
+  // The same solo with one more piece of the sound chain removed at each step. Whichever
+  // step the static disappears at is its cause; if it never does, it's the playback itself.
+  function addLadder(song, track, sections) {
+    const inst = song.instruments[track];
+    const steps = [
+      ["no reverb", { ...inst }],
+      ["no reverb, 1 voice", { ...inst, voices: 1, detune: 0 }],
+      ["no reverb, 1 voice, no filter", { ...inst, voices: 1, detune: 0, filter: undefined }],
+      ["plain sine", { wave: "sine", volume: 0.008, env: inst.env, gate: inst.gate }],
+    ];
+    steps.forEach(([label, override], i) => RetroSongs.register({
+      ...song,
+      reverb: undefined,
+      master: undefined,
+      instruments: { ...song.instruments, [track]: override },
+      id: `${song.id}--${track}--test${i + 1}`,
+      title: `${song.title.replace(/ \(.*\)$/, "")} › ${track} test ${i + 1}: ${label}`,
+      sections,
+    }));
   }
 })();

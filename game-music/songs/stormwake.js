@@ -1,6 +1,6 @@
 /*
  * "Stormwake" — an original fast melodic metal theme, chip style.
- * G minor, 176 BPM. Thrash-speed tremolo-picked power chords and a skank beat under a
+ * G minor, 176 BPM. Thrash-speed tremolo-picked power chords and a driving rock beat under a
  * heroic square-wave lead; the last chorus jumps up a whole step to A minor.
  * Style references for technique only (melodic thrash and power metal, NES action-game
  * soundtracks); every melody and riff is original.
@@ -19,7 +19,9 @@ const { transpose } = RetroSongs;
 // Tremolo power chord for a bar: eight 16ths, then four punched eighths.
 const trem = (chord) => `[${chord}/16]x8 ${chord}/8 R/8 ${chord}/8 ${chord}/8`;
 const TREM_BASS = (root) => `[${root}/8]x5 R/8 ${root}/8 ${root}/8`;
-const SKANK = "[K/16 K/16 S/8]x4";
+// A driving rock beat: kick on 1, 3 and the "and" of 3, snare on 2 and 4; hats on their own track.
+const BEAT = "K/8 R/8 S/8 R/8 K/8 K/8 S/8 R/8";
+const HATS = "[[H/8]x8 |]x4";
 
 const VERSE_HOOK = "G4/4 D5/8 D5/8 D5/4 C5/8 Bb4/8 | C5/4 Bb4/8 G4/8 Bb4/2"
   + " | F4/4 D5/8 D5/8 D5/4 Eb5/8 F5/8 | G5/4. F5/8 Eb5/8 D5/8 C5/4";
@@ -29,7 +31,8 @@ const CHORUS = {
   twin:   "G5/2 Eb5/4 Bb4/4 | F5/2 C5/4 A4/4 | G5/4 F5/8 D5/8 Bb5/4 G5/4 | F#5/4. D5/8 D5/2",
   guitar: [trem("Eb3+Bb3"), trem("F3+C4"), trem("G2+D3"), trem("D3+A3")].join(" | "),
   bass:   [TREM_BASS("Eb2"), TREM_BASS("F2"), TREM_BASS("G2"), TREM_BASS("D2")].join(" | "),
-  drums:  `K+C/16 K/16 S/8 [K/16 K/16 S/8]x3 | [${SKANK} |]x2 [K/16 K/16 S/8]x2 [S/16]x8`,
+  drums:  `K+C/8 R/8 S/8 R/8 K/8 K/8 S/8 R/8 | [${BEAT} |]x2 K/8 K/8 S/8 K/8 [S/16]x8`,
+  cymbals: HATS,
 };
 
 // A whole step up, except the last bar, which turns to D (V of G minor) for the loop.
@@ -40,6 +43,7 @@ const CHORUS_UP = {
   guitar: lastBar(transpose(CHORUS.guitar, 2), trem("D3+A3")),
   bass:   lastBar(transpose(CHORUS.bass, 2), TREM_BASS("D2")),
   drums:  CHORUS.drums,
+  cymbals: CHORUS.cymbals,
 };
 
 RetroSongs.register({
@@ -53,6 +57,7 @@ RetroSongs.register({
     twin:   { wave: "square",   volume: 0.035 },
     guitar: { wave: "sawtooth", volume: 0.028 },
     bass:   { wave: "triangle", volume: 0.3 },
+    cymbals: { drums: true, volume: 0.3 },
   },
   sections: {
     // The hook alone over a G pedal, toms rolling in.
@@ -67,7 +72,8 @@ RetroSongs.register({
       lead:   VERSE_HOOK,
       guitar: [trem("G2+D3"), trem("Eb3+Bb3"), trem("Bb2+F3"), trem("F3+C4")].join(" | "),
       bass:   [TREM_BASS("G2"), TREM_BASS("Eb2"), TREM_BASS("Bb1"), TREM_BASS("F2")].join(" | "),
-      drums:  `K+C/16 K/16 S/8 [K/16 K/16 S/8]x3 | [${SKANK} |]x2 [K/16 K/16 S/8]x2 S/8 S/8 S/8 S/8`,
+      drums:  `K+C/8 R/8 S/8 R/8 K/8 K/8 S/8 R/8 | [${BEAT} |]x2 K/8 R/8 S/8 R/8 S/8 S/8 S/8 S/8`,
+      cymbals: HATS,
     },
 
     chorus: CHORUS,

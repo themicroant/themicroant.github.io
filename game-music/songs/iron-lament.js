@@ -8,9 +8,9 @@
  * Style references for technique only (twin-guitar melodic metal, Mega Drive action
  * soundtracks); every melody and riff is original.
  *
- *   intro    the hook as a riff: guitars in fifths and bass, two octaves down, drums on its rhythm
- *   verse    palm-muted chugs on Em – C – Em – B, PSG arpeggios, lead out
- *   chorus   the hook on twin leads over the gallop, Em – C – D – B
+ *   intro    the lead sings the hook from bar 1; guitars and bass play it two octaves down
+ *   verse    a calm low verse melody over palm-muted chugs, Em – C – Em – B, PSG arpeggios
+ *   chorus   8 bars: the hook on twin leads, then an answer climbing to C6 and home to E
  *   bridge   half time: the hook's first half at half speed over Em – C – Am – B
  *   chorusUp the chorus transposed up 2 semitones, to F# minor
  *   outro    everyone plays the hook in unison octaves, landing on F#
@@ -27,6 +27,15 @@ const HOOK = "E5/8 E5/8 R/8 E5/8 B5/4. A5/8 | G5/8 F#5/8 E5/8 G5/8~ G5/2"
 const TWIN = "B4/8 B4/8 R/8 B4/8 G5/4. F#5/8 | E5/8 D5/8 C5/8 E5/8~ E5/2"
   + " | D5/8 D5/8 R/8 D5/8 F#5/4. E5/8 | D#5/8 C5/8 B4/8 D#5/8~ D#5/2";
 
+// The chorus answers the hook with four more bars: the same rhythm, a leap up to C6, home to E.
+const ANSWER = "E5/8 E5/8 R/8 E5/8 C6/4. B5/8 | A5/8 G5/8 F#5/8 A5/8~ A5/2"
+  + " | G5/8 F#5/8 E5/8 F#5/8 D#5/4. B4/8 | E5/1";
+const ANSWER_TWIN = "C5/8 C5/8 R/8 C5/8 A5/4. G5/8 | F#5/8 E5/8 D5/8 F#5/8~ F#5/2"
+  + " | E5/8 D#5/8 B4/8 D#5/8 B4/4. F#4/8 | B4/1";
+// A calmer verse melody in the low register, ending on D#5 to lead into the hook's E.
+const VERSE_MELODY = "R/4 B4/8 B4/8 E5/4 D5/8 B4/8 | C5/4. B4/8 G4/2"
+  + " | R/4 B4/8 B4/8 E5/4 F#5/8 G5/8 | F#5/4. E5/8 D#5/2";
+
 const bars = (text, from, to) => text.split(" | ").slice(from, to).join(" | ");
 const lastBar = (text, bar) => [...text.split(" | ").slice(0, -1), bar].join(" | ");
 // Every note twice as long: /8 -> /4, /4. -> /2., /2 -> /1.
@@ -40,15 +49,16 @@ const VERSE_GTR = [chug("E2", "G2", "F#2"), chug("C2", "E2", "D2"), chug("E2", "
 const gallop = (...notes) => notes.map((n) => `[${n}/8 ${n}/16 ${n}/16]x4`).join(" | ");
 const GALLOP_DRUMS = "K/8 K/16 K/16 S/8 K/16 K/16 K/8 K/16 K/16 S/8 K/16 K/16";
 
+// Eight bars: Em – C – D – B, then C – D – B – Em.
 const CHORUS = {
-  lead:    HOOK,
-  twin:    TWIN,
-  gtrL:    gallop("E2", "C2", "D2", "B1"),
-  gtrR:    gallop("B2", "G2", "A2", "F#2"),
-  bass:    gallop("E2", "C2", "D2", "B1"),
-  hit:     "E4+G4+B4/8 R/8 R/2. | R/1 | D4+F#4+A4/8 R/8 R/2. | R/1",
-  drums:   `[${GALLOP_DRUMS} |]x3 [K/16]x8 [S/16]x8`,
-  cymbals: "C/4 [H/8]x6 | [H/8]x8 | C/4 [H/8]x6 | [H/8]x6 C/4",
+  lead:    `${HOOK} | ${ANSWER}`,
+  twin:    `${TWIN} | ${ANSWER_TWIN}`,
+  gtrL:    gallop("E2", "C2", "D2", "B1", "C2", "D2", "B1", "E2"),
+  gtrR:    gallop("B2", "G2", "A2", "F#2", "G2", "A2", "F#2", "B2"),
+  bass:    gallop("E2", "C2", "D2", "B1", "C2", "D2", "B1", "E2"),
+  hit:     "E4+G4+B4/8 R/8 R/2. | R/1 | D4+F#4+A4/8 R/8 R/2. | R/1 | C4+E4+G4/8 R/8 R/2. | R/1 | B3+D#4+F#4/8 R/8 R/2. | R/1",
+  drums:   `[${GALLOP_DRUMS} |]x7 [K/16]x8 [S/16]x8`,
+  cymbals: "[C/4 [H/8]x6 | [H/8]x8 |]x3 C/4 [H/8]x6 | [H/8]x6 C/4",
 };
 
 RetroSongs.register({
@@ -81,9 +91,10 @@ RetroSongs.register({
     cymbals: { drums: true, kit: "studio", bits: 5, volume: 0.24, filter: { freq: 9000 } },
   },
   sections: {
-    // The hook as a riff, two octaves down: left guitar on the melody, right a fifth above
-    // it (power-chord melody), bass doubling. The drums hit on the hook's own rhythm.
+    // The hook from bar 1: the lead sings it while the guitars play it two octaves down
+    // (left on the melody, right a fifth above), bass doubling, drums on its rhythm.
     intro: {
+      lead:    HOOK,
       gtrL:    transpose(HOOK, -24),
       gtrR:    transpose(HOOK, -17),
       bass:    transpose(HOOK, -36),
@@ -92,8 +103,9 @@ RetroSongs.register({
       cymbals: "C/2 R/2 | R/2 C/2 | C/2 R/2 | R/2 R/4 C/4",
     },
 
-    // Em | C | Em | B — chugs, fifths on the right, arpeggios on top. No lead: room for the chorus.
+    // Em | C | Em | B — chugs, fifths on the right, arpeggios, and a calm low verse melody.
     verse: {
+      lead:    VERSE_MELODY,
       gtrL:    VERSE_GTR,
       gtrR:    transpose(VERSE_GTR, 7),
       bass:    "[E2/8]x8 | [C2/8]x8 | [E2/8]x8 | [B1/8]x8",

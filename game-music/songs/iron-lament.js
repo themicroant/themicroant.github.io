@@ -63,7 +63,7 @@ const CHORUS = {
 
 RetroSongs.register({
   id: "iron-lament",
-  title: "Iron Lament (Melodic Metal)",
+  title: "Iron Lament (Final Battle)",
   bpm: 152,
   volume: 0.4,
   arrangement: ["intro", "verse", "chorus", "verse", "chorus", "bridge", "chorusUp", "outro"],

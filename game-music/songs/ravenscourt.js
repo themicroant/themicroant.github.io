@@ -65,7 +65,7 @@ const FILL = "K/8 K/8 S/8 K/8 [S/16]x4 [T/16]x4";
 
 RetroSongs.register({
   id: "ravenscourt",
-  title: "Ravenscourt (Heavy Metal)",
+  title: "Ravenscourt (Castle)",
   bpm: 138,
   volume: 0.4,
   arrangement: ["intro", "verse", "chorus", "verse", "chorus", "solo", "chorus", "outro"],

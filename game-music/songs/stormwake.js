@@ -19,9 +19,10 @@ const { transpose } = RetroSongs;
 // Tremolo power chord for a bar: eight 16ths, then four punched eighths.
 const trem = (chord) => `[${chord}/16]x8 ${chord}/8 R/8 ${chord}/8 ${chord}/8`;
 const TREM_BASS = (root) => `[${root}/8]x5 R/8 ${root}/8 ${root}/8`;
-// A driving rock beat: kick on 1, 3 and the "and" of 3, snare on 2 and 4; hats on their own track.
-const BEAT = "K/8 R/8 S/8 R/8 K/8 K/8 S/8 R/8";
-const HATS = "[[H/8]x8 |]x4";
+// No snare: the kick drives (1, 3 and the "and" of 3), an open hi-hat accents 2 and 4,
+// and the fills are on toms.
+const BEAT = "K/8 R/8 R/8 R/8 K/8 K/8 R/8 R/8";
+const HATS = "[[H/8 H/8 O/8 H/8]x2 |]x4";
 
 const VERSE_HOOK = "G4/4 D5/8 D5/8 D5/4 C5/8 Bb4/8 | C5/4 Bb4/8 G4/8 Bb4/2"
   + " | F4/4 D5/8 D5/8 D5/4 Eb5/8 F5/8 | G5/4. F5/8 Eb5/8 D5/8 C5/4";
@@ -31,7 +32,7 @@ const CHORUS = {
   twin:   "G5/2 Eb5/4 Bb4/4 | F5/2 C5/4 A4/4 | G5/4 F5/8 D5/8 Bb5/4 G5/4 | F#5/4. D5/8 D5/2",
   guitar: [trem("Eb3+Bb3"), trem("F3+C4"), trem("G2+D3"), trem("D3+A3")].join(" | "),
   bass:   [TREM_BASS("Eb2"), TREM_BASS("F2"), TREM_BASS("G2"), TREM_BASS("D2")].join(" | "),
-  drums:  `K+C/8 R/8 S/8 R/8 K/8 K/8 S/8 R/8 | [${BEAT} |]x2 K/8 K/8 S/8 K/8 [S/16]x8`,
+  drums:  `K+C/8 R/8 R/8 R/8 K/8 K/8 R/8 R/8 | [${BEAT} |]x2 K/8 K/8 R/8 K/8 [T/16]x8`,
   cymbals: HATS,
 };
 
@@ -48,7 +49,7 @@ const CHORUS_UP = {
 
 RetroSongs.register({
   id: "stormwake",
-  title: "Stormwake (Melodic Metal)",
+  title: "Stormwake (Chase)",
   bpm: 176,
   arrangement: ["intro", "verse", "chorus", "verse", "break", "chorusUp"],
   loopFrom: "verse",
@@ -64,7 +65,7 @@ RetroSongs.register({
     intro: {
       lead:  VERSE_HOOK,
       bass:  "[G1/4]x4 | [G1/4]x4 | [G1/4]x4 | [G1/8]x4 D2/8 D2/8 F#2/8 F#2/8",
-      drums: "K/4 R/4 K/4 R/4 | K/4 R/4 K/4 R/4 | K/4 T/8 T/8 K/4 T/8 T/8 | [T/16]x8 [S/16]x8",
+      drums: "K/4 R/4 K/4 R/4 | K/4 R/4 K/4 R/4 | K/4 T/8 T/8 K/4 T/8 T/8 | [T/16]x16",
     },
 
     // Gm | Eb | Bb | F
@@ -72,7 +73,7 @@ RetroSongs.register({
       lead:   VERSE_HOOK,
       guitar: [trem("G2+D3"), trem("Eb3+Bb3"), trem("Bb2+F3"), trem("F3+C4")].join(" | "),
       bass:   [TREM_BASS("G2"), TREM_BASS("Eb2"), TREM_BASS("Bb1"), TREM_BASS("F2")].join(" | "),
-      drums:  `K+C/8 R/8 S/8 R/8 K/8 K/8 S/8 R/8 | [${BEAT} |]x2 K/8 R/8 S/8 R/8 S/8 S/8 S/8 S/8`,
+      drums:  `K+C/8 R/8 R/8 R/8 K/8 K/8 R/8 R/8 | [${BEAT} |]x2 K/8 R/8 R/8 R/8 T/8 T/8 T/8 T/8`,
       cymbals: HATS,
     },
 
@@ -84,7 +85,7 @@ RetroSongs.register({
       guitar: "G2+D3/8 R/8 R/4 G2+D3/8 R/8 R/4 | Eb3+Bb3/8 R/8 R/4 Eb3+Bb3/8 R/8 R/4"
             + " | C3+G3/8 R/8 R/4 C3+G3/8 R/8 R/4 | D3+A3/4t D3+A3/4t D3+A3/4t D3+A3/2",
       bass:   "G1/2 G2/4t F2/4t D2/4t | Eb2/2 Eb2/4t D2/4t Bb1/4t | C2/2 C2/4t D2/4t Eb2/4t | D2/4t D2/4t D2/4t D2/2",
-      drums:  "K/4 R/4 S/4 R/4 | K/4 R/4 S/4t T/4t T/4t | K/4 R/4 S/4 R/4 | S/4t S/4t S/4t [S/16]x8",
+      drums:  "K/4 R/4 T/4 R/4 | K/4 R/4 T/4t T/4t T/4t | K/4 R/4 T/4 R/4 | T/4t T/4t T/4t [T/16]x8",
     },
 
     chorusUp: CHORUS_UP,

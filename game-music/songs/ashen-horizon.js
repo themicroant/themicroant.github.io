@@ -28,7 +28,7 @@ const RIFF = "B2/8 B2/8 R/16 B2/16 B2/8 D3/8 R/16 B2/16 C#3/8 D3/8 | G2/8 G2/8 R
 
 RetroSongs.register({
   id: "ashen-horizon",
-  title: "Ashen Horizon (Melodic Death Metal)",
+  title: "Ashen Horizon (Title Screen)",
   bpm: 138,
   arrangement: ["intro", "twin", "heavy", "twin2"],
   loopFrom: "twin",

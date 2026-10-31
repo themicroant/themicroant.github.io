@@ -15,9 +15,9 @@ export const EPILOGUE = [
 ];
 export const NPCS = {
     narrator: { name: '' },
-    maren: { name: 'Elder Maren', glyph: '👵', tint: '#5b7a3a' },
-    ione: { name: 'Archivist Ione', glyph: '👻', tint: '#2b4b8a' },
-    nadira: { name: 'Nadira, Sand Seer', glyph: '🔮', tint: '#a8742c' },
+    maren: { name: 'Elder Maren', sprite: 'assets/units/n_maren.png' },
+    ione: { name: 'Archivist Ione', sprite: 'assets/units/n_ione.png' },
+    nadira: { name: 'Nadira, Sand Seer', sprite: 'assets/units/n_nadira.png' },
     vaelith: { name: 'Vaelith', sprite: 'assets/units/e_boss.png' },
 };
 export const SITES = [

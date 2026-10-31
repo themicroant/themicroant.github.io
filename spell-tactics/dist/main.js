@@ -1,7 +1,7 @@
 import { HEROES, heroOf } from './data/heroes.js';
 import { ENEMIES } from './data/enemies.js';
 import { itemOf } from './data/items.js';
-import { EPILOGUE, PROLOGUE, SITES } from './data/sites.js';
+import { EPILOGUE, NPCS, PROLOGUE, SITES } from './data/sites.js';
 import { applyBattle, guestFor } from './progress.js';
 import { clearSave, hasSave, loadSave, newGameSave, writeSave } from './save.js';
 import { bar, button, clearModals, confirmModal, fitStage, h, modal, portraitEl, preload } from './ui.js';
@@ -135,7 +135,7 @@ async function boot() {
     fitStage();
     window.addEventListener('resize', fitStage);
     const urls = [...HEROES.map((x) => x.sprite), ...ENEMIES.filter((e) => e.art.sprite).map((e) => e.art.sprite),
-        ...['plain', 'forest', 'mountain', 'water', 'wall', 'fort'].map((t) => `assets/tiles/${t}.jpg`), 'assets/ui/bg.jpg', 'assets/ui/title.jpg'];
+        ...['plain', 'forest', 'mountain', 'water', 'wall', 'fort', 'lava', 'sand', 'bog', 'ice', 'snow', 'rubble', 'rune', 'grave', 'chasm'].map((t) => `assets/tiles/${t}.jpg`), 'assets/ui/bg.jpg', 'assets/ui/title.jpg', ...Object.values(NPCS).filter((n) => n.sprite).map((n) => n.sprite)];
     await preload([...new Set(urls)]);
     goTitle();
 }

@@ -76,10 +76,8 @@ small { font-size: 11px; color: var(--muted); }
 
 /* ---------- title ---------- */
 .title { background: url(assets/ui/title.jpg) center/cover; }
-.title-logo { position: absolute; top: 70px; left: 0; right: 0; text-align: center; }
-.tl-main { font-family: Georgia, "Times New Roman", serif; font-size: 46px; font-weight: 700; color: var(--gold); letter-spacing: 1px;
-  text-shadow: 0 2px 0 #6b4a12, 0 0 24px rgba(255, 210, 120, .6), 0 4px 10px rgba(0,0,0,.8); }
-.tl-sub { font-family: Georgia, serif; font-size: 18px; color: #fff; letter-spacing: 4px; text-transform: uppercase; text-shadow: 0 2px 6px #000; margin-top: 4px; }
+.title-logo { position: absolute; top: 190px; left: 0; right: 0; text-align: center; }
+.tl-sub { font-family: Georgia, serif; font-size: 15px; color: #fff; letter-spacing: 4px; text-transform: uppercase; text-shadow: 0 2px 6px #000; }
 .title-btns { position: absolute; bottom: 90px; left: 50px; right: 50px; display: flex; flex-direction: column; gap: 12px; }
 .title-ver { position: absolute; bottom: 10px; right: 12px; font-size: 10px; color: var(--muted); }
 
@@ -248,26 +246,24 @@ small { font-size: 11px; color: var(--muted); }
 .b-map.shake { animation: shake .3s; }
 @keyframes shake { 25% { transform: translate(3px, -2px); } 50% { transform: translate(-3px, 2px); } 75% { transform: translate(2px, 1px); } }
 .b-tiles, .b-goals, .b-hl, .b-units, .b-fx { position: absolute; inset: 0; pointer-events: none; }
-.tile { position: absolute; width: 45px; height: 45px; background-size: cover; }
+.tile { position: absolute; width: 45px; height: 45px; background-size: cover; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25), inset 0 0 14px rgba(0,0,0,.28); }
 .t-plain { background-image: url(assets/tiles/plain.jpg); }
 .t-forest { background-image: url(assets/tiles/forest.jpg); }
 .t-mountain { background-image: url(assets/tiles/mountain.jpg); }
 .t-water { background-image: url(assets/tiles/water.jpg); }
 .t-wall { background-image: url(assets/tiles/wall.jpg); }
 .t-fort { background-image: url(assets/tiles/fort.jpg); }
-.t-lava { background: radial-gradient(circle at 30% 40%, #ffd36b 0 8%, transparent 20%), radial-gradient(circle at 70% 65%, #ffb03b 0 6%, transparent 18%),
-  radial-gradient(circle, #ff6a1a, #b3200a 70%, #3a0a04); box-shadow: inset 0 0 8px #1a0300; animation: lava 2.5s infinite alternate; }
+.t-lava { background-image: url(assets/tiles/lava.jpg); animation: lava 2.5s infinite alternate; }
 @keyframes lava { to { filter: brightness(1.25); } }
-.t-sand { background: repeating-linear-gradient(160deg, #e3c27c 0 7px, #d4ad62 7px 12px), #e3c27c; }
-.t-bog { background: radial-gradient(circle at 25% 30%, #6d7a3a 0 10%, transparent 14%), radial-gradient(circle at 70% 70%, #556030 0 8%, transparent 12%), linear-gradient(135deg, #3b4a1e, #2a3214); }
-.t-ice { background: repeating-linear-gradient(60deg, transparent 0 9px, rgba(255,255,255,.75) 9px 10px, transparent 10px 19px), repeating-linear-gradient(-30deg, transparent 0 13px, rgba(255,255,255,.5) 13px 14px), linear-gradient(135deg, #7fb6d6, #b6dcf0 40%, #79aecf 65%, #c3e4f4); }
-.t-snow { background: radial-gradient(ellipse at 30% 32%, #fff 0 16%, #b8c9dc 28%, transparent 33%), radial-gradient(ellipse at 70% 70%, #fff 0 18%, #b1c3d8 30%, transparent 35%), radial-gradient(ellipse at 75% 20%, #f2f6fb 0 10%, transparent 14%), linear-gradient(135deg, #c3d1e0, #93a8bf); }
-.t-rubble { background: radial-gradient(circle at 25% 30%, #9a958c 0 12%, transparent 13%), radial-gradient(circle at 65% 60%, #85807a 0 16%, transparent 17%),
-  radial-gradient(circle at 40% 80%, #aaa49a 0 9%, transparent 10%), url(assets/tiles/plain.jpg) center/cover; }
-.t-rune { background: radial-gradient(circle, rgba(140, 220, 255, .95) 0 12%, rgba(60, 150, 255, .5) 30%, transparent 46%), url(assets/tiles/plain.jpg) center/cover; animation: rune 2s infinite alternate; }
+.t-sand { background-image: url(assets/tiles/sand.jpg); }
+.t-bog { background-image: url(assets/tiles/bog.jpg); }
+.t-ice { background-image: url(assets/tiles/ice.jpg); }
+.t-snow { background-image: url(assets/tiles/snow.jpg); }
+.t-rubble { background-image: url(assets/tiles/rubble.jpg); }
+.t-rune { background-image: url(assets/tiles/rune.jpg); animation: rune 2s infinite alternate; }
 @keyframes rune { to { filter: brightness(1.4); } }
-.t-grave { background: linear-gradient(#8a8a92, #6a6a72) 50% 40% / 14px 20px no-repeat, linear-gradient(#6a6a72, #6a6a72) 50% 56% / 22px 4px no-repeat, url(assets/tiles/plain.jpg) center/cover; }
-.t-chasm { background: radial-gradient(ellipse at 30% 40%, rgba(220,230,255,.35), transparent 40%), linear-gradient(180deg, #2a3450, #0b0f1e); }
+.t-grave { background-image: url(assets/tiles/grave.jpg); }
+.t-chasm { background-image: url(assets/tiles/chasm.jpg); }
 .t-exit { background-image: url(assets/tiles/plain.jpg); }
 .goal { position: absolute; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #ffe27a;
   text-shadow: 0 0 8px #ffb300, 0 0 2px #000; background: radial-gradient(circle, rgba(255, 226, 122, .45), transparent 70%); animation: pulse2 1.2s infinite alternate; }
@@ -283,12 +279,12 @@ small { font-size: 11px; color: var(--muted); }
 .hl.cur { box-shadow: inset 0 0 0 3px var(--gold); }
 @keyframes blink { to { opacity: .55; } }
 .unit { position: absolute; left: 0; top: 0; width: 45px; height: 45px; transition: transform .1s linear; }
-.unit .art { position: absolute; left: -2px; right: -2px; bottom: 3px; height: 60px; }
-.unit.wide .art { left: -8px; right: -8px; height: 54px; }
+.unit .art { position: absolute; left: -9px; right: -9px; bottom: 2px; height: 63px; }
+.unit.wide .art { left: -12px; right: -12px; height: 58px; }
 .unit .art.token { left: 5px; right: 5px; bottom: 7px; height: 35px; }
 .unit .art.token span { font-size: 22px; }
 .unit.hero .art.sprite { filter: drop-shadow(0 0 2px rgba(79, 140, 255, .9)) drop-shadow(0 2px 2px rgba(0,0,0,.7)); }
-.unit.enemy .art.sprite { filter: drop-shadow(0 0 2px rgba(255, 60, 70, .9)) drop-shadow(0 2px 2px rgba(0,0,0,.7)); }
+.unit.enemy .art.sprite { filter: drop-shadow(0 0 1.5px rgba(255, 60, 70, .8)) drop-shadow(0 2px 2px rgba(0,0,0,.7)); }
 .unit.done .art { filter: grayscale(1) brightness(.65) !important; }
 .unit.sel .art { animation: hop .6s infinite alternate; }
 @keyframes hop { to { translate: 0 -3px; } }

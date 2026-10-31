@@ -11,7 +11,7 @@ function speaker(who) {
         return { name: en.name, art: en.art, enemy: true };
     const n = NPCS[who];
     if (n)
-        return { name: n.name, art: n.sprite ? { sprite: n.sprite } : n.glyph ? { glyph: n.glyph, tint: n.tint } : null, enemy: !!n.sprite };
+        return { name: n.name, art: n.sprite ? { sprite: n.sprite } : n.glyph ? { glyph: n.glyph, tint: n.tint } : null, enemy: who === 'vaelith' };
     return { name: who, art: null, enemy: false };
 }
 export function show(lines, backdrop, title, onDone) {

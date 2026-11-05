@@ -65,6 +65,10 @@ function isAdjacent(a, b) {
 // A door/window is a void cell just outside a room; this finds the one playable cell it opens
 // into, for movement/logging purposes (the Thief actually stands in that cell, not the window).
 function doorEntryCell(door) {
+  if (door.into) {
+    const [dr, dc] = { top: [-1, 0], bottom: [1, 0], left: [0, -1], right: [0, 1] }[door.into];
+    return { row: door.row + dr, col: door.col + dc };
+  }
   const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
   for (const [dr, dc] of dirs) {
     const r = door.row + dr;

@@ -45,8 +45,8 @@ const GameData = {
     { rows: [9, 9], cols: [4, 9] }, // ring: south of White, spanning above both south rooms
     { rows: [4, 8], cols: [4, 4] }, // ring: west of White
     { rows: [4, 8], cols: [9, 9] }, // ring: east of White
-    { rows: [6, 6], cols: [1, 3] }, // the hallway between Scarlet and Green
-    { rows: [5, 5], cols: [10, 12] }, // the hallway between Plum and Peacock
+    { rows: [6, 6], cols: [2, 3] }, // the hallway between Scarlet and Green (door sits in its outer end, (6,1))
+    { rows: [5, 5], cols: [10, 11] }, // the hallway between Plum and Peacock (door sits in its outer end, (5,12))
     { rows: [10, 10], cols: [6, 7] }, // the walkable connector between Gray and Power
   ],
 
@@ -61,11 +61,13 @@ const GameData = {
   // checking top/bottom/left/right in that fixed order, so whichever room it finds first wins,
   // silently mislabeling the door as the wrong room's. Every point below is placed so only ONE
   // room cell actually borders it — verify a new one the same way before adding it.
+  // `into` (optional) names the neighbor side the door opens onto, for the two hallway doors that
+  // sit between two rooms (they'd otherwise border Scarlet/Green or Plum/Peacock ambiguously).
   DOOR_POINTS: [
     { row: 0, col: 5 }, { row: 0, col: 8 }, // North (Mustard), one square in from each corner
-    { row: 4, col: 0 }, { row: 6, col: 0 }, { row: 8, col: 0 }, // West: Scarlet, hallway, Green
+    { row: 4, col: 0 }, { row: 6, col: 1, into: "right" }, { row: 8, col: 0 }, // West: Scarlet, hallway (one spot in), Green
     { row: 10, col: 2 }, // Green Room, second door (south end of its west wall)
-    { row: 2, col: 11 }, { row: 5, col: 13 }, { row: 8, col: 13 }, // East: Plum, hallway, Peacock
+    { row: 2, col: 11 }, { row: 5, col: 12, into: "left" }, { row: 8, col: 13 }, // East: Plum, hallway (one spot in), Peacock
     { row: 11, col: 6 }, { row: 11, col: 7 }, // South, on the walkable connector — the only two
     // south doors; Gray and Power have no exterior door of their own (they still connect inward
     // via their OPENINGS below).

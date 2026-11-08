@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tactics Battle</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="stage">
+
+  <section class="screen" id="screen-title">
+    <div id="titleName">Tactics Battle</div>
+    <div id="titleSub">Hold the dawn, one battle at a time.</div>
+    <div id="titleLoading">Loading…</div>
+    <div id="titleBtns">
+      <button id="btnNew" class="btn primary" disabled>New Game</button>
+      <button id="btnContinue" class="btn" disabled>Continue</button>
+    </div>
+    <div id="titleVersion"></div>
+  </section>
+
+  <section class="screen" id="screen-chapters">
+    <h1 class="scr-h">Chapters</h1>
+    <div id="chapterList"></div>
+    <button id="btnChaptersBack" class="btn">Back</button>
+  </section>
+
+  <section class="screen" id="screen-team">
+    <div id="teamHeader"></div>
+    <div id="teamSlots"></div>
+    <div id="rosterGrid"></div>
+    <div id="heroDetail"></div>
+    <button id="btnTeamBack" class="btn">Back</button>
+    <button id="btnBattle" class="btn primary">Battle!</button>
+  </section>
+
+  <section class="screen" id="screen-dialog">
+    <div id="dlgBackdrop"></div>
+    <div id="dlgPortraitL" class="dlg-portrait left"></div>
+    <div id="dlgPortraitR" class="dlg-portrait right"></div>
+    <div id="dlgPlate"></div>
+    <div id="dlgBox">
+      <div id="dlgText"></div>
+      <div id="dlgNext">▼</div>
+    </div>
+    <button id="btnSkip" class="btn">Skip ▸▸</button>
+  </section>
+
+  <section class="screen" id="screen-battle">
+    <div id="top"></div>
+    <div id="map">
+      <div id="tiles"></div>
+      <div id="hl"></div>
+      <div id="units"></div>
+      <div id="fx"></div>
+    </div>
+    <div id="bottom">
+      <div class="row1">
+        <div id="turn">Turn 1</div>
+        <div id="phase" class="player">Player Phase</div>
+        <div id="remain"></div>
+      </div>
+      <div class="row3">
+        <button id="btnDanger" class="btn">Danger</button>
+        <button id="btnEnd" class="btn primary">End Turn</button>
+        <button id="btnMenu" class="btn">Menu</button>
+        <button id="btnHelp" class="btn sq">?</button>
+      </div>
+    </div>
+    <div id="banner"><span></span></div>
+  </section>
+
+  <div id="modalLayer"></div>
+</div>
+<script type="module" src="dist/main.js"></script>
+</body>
+</html>

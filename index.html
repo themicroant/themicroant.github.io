@@ -64,8 +64,8 @@
       }
 
       main {
-        width: min(600px, 90vw);
-        padding: 32px;
+        width: min(1100px, 94vw);
+        padding: 24px 0;
       }
 
       .gate-locked main {
@@ -84,7 +84,7 @@
         font-size: 1.8rem;
         font-weight: 600;
         letter-spacing: 0.08em;
-        margin: 0 0 28px;
+        margin: 0 0 20px;
         color: var(--accent);
         text-shadow: 0 0 12px rgba(76, 243, 255, 0.5);
         text-transform: uppercase;
@@ -92,13 +92,14 @@
 
       .demos {
         display: grid;
-        gap: 14px;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 10px;
       }
 
       .demo-card {
         position: relative;
         display: block;
-        padding: 18px 20px;
+        padding: 12px 16px;
         background: var(--panel);
         border: 1px solid var(--line);
         color: inherit;
@@ -120,12 +121,12 @@
       .demo-card:hover {
         border-color: var(--accent);
         box-shadow: 0 0 18px rgba(76, 243, 255, 0.25);
-        transform: translateX(4px);
+        transform: translateY(-2px);
       }
 
       .demo-card h2 {
         margin: 0 0 4px;
-        font-size: 1rem;
+        font-size: 0.9rem;
         letter-spacing: 0.05em;
         text-transform: uppercase;
         color: var(--text);
@@ -138,7 +139,8 @@
 
       .demo-card p {
         margin: 0;
-        font-size: 0.85rem;
+        font-size: 0.78rem;
+        line-height: 1.35;
         color: var(--text-dim);
       }
 
@@ -226,79 +228,79 @@
       <div class="demos">
         <a class="demo-card" href="spell-categorizer/">
           <h2>Spell Shapes</h2>
-          <p>Healer spells from 7 classes across 5 games, broken into universal shape labels and grouped by shape.</p>
+          <p>Healer spells grouped by shape.</p>
         </a>
         <a class="demo-card" href="mech-survival/">
-          <h2>ASHFRAME — The Long Dry</h2>
-          <p>Turn-based mech tactics for portrait phones: limited ammo and fuel, wearing parts, chassis-limited loadouts.</p>
+          <h2>ASHFRAME</h2>
+          <p>Mech tactics with scarce ammo and fuel.</p>
         </a>
         <a class="demo-card" href="team-dungeons/">
           <h2>Team Dungeons</h2>
-          <p>Co-op dungeon crawl for phones — pick a class, plan simultaneous turns with friends, interrupt casts, dodge telegraphs, and roll for loot.</p>
+          <p>Co-op dungeon crawl with simultaneous turns.</p>
         </a>
         <a class="demo-card" href="space-trek/">
-          <h2>Space Trek — Frontier Command</h2>
-          <p>Turn-based starship tactics for portrait phones.</p>
+          <h2>Space Trek</h2>
+          <p>Turn-based starship tactics.</p>
         </a>
         <a class="demo-card" href="nova-tactics/">
           <h2>Nova Tactics</h2>
-          <p>Dark fantasy tactics game</p>
+          <p>Dark fantasy tactics.</p>
         </a>
         <a class="demo-card" href="spell-tactics/">
           <h2>Spell Tactics</h2>
-          <p>Portrait-phone tactics RPG with customizable skills, items and a nine-site overworld.</p>
+          <p>Tactics RPG with custom skills.</p>
         </a>
         <a class="demo-card" href="dawnwatch-emblem/">
           <h2>Dawnwatch Emblem</h2>
-          <p>Grid-based tactics RPG with a five-chapter campaign, recruitable heroes and team building.</p>
+          <p>Tactics RPG with a five-chapter campaign.</p>
         </a>
         <a class="demo-card" href="game-music/">
           <h2>Game Music</h2>
-          <p>A retro Web Audio jukebox — original chiptune battle themes and a victory jingle.</p>
+          <p>Chiptune battle-theme jukebox.</p>
         </a>
         <a class="demo-card" href="fall-tactics/">
           <h2>Fall Tactics</h2>
-          <p>Portrait touch tactics — five heroes versus five enemies across a river. Move, strike or cast, one unit at a time.</p>
+          <p>Five heroes vs. five enemies.</p>
         </a>
         <a class="demo-card" href="7-ships/">
           <h2>7 Ships</h2>
-          <p>Earth is gone. Race seven ships to the Outer Rim: flip planet cards, upgrade your hull, trade or betray your rivals.</p>
+          <p>Race to the Outer Rim.</p>
         </a>
         <a class="demo-card" href="7wonders/">
           <h2>7 Wonders</h2>
-          <p>Draft cards, produce and trade resources, build your Wonder, and score victory points across three Ages.</p>
+          <p>Card-drafting civ builder.</p>
         </a>
         <a class="demo-card" href="fire-tactics/">
           <h2>Fire Tactics</h2>
-          <p>Grid tactics skirmish — move your squad across terrain, trade blows with a counterattack system, defeat all four enemies.</p>
+          <p>Squad skirmish with counterattacks.</p>
         </a>
         <a class="demo-card" href="slay-the-tower/">
           <h2>Slay the Emojis</h2>
-          <p>Deckbuilding roguelike, one floor at a time.</p>
+          <p>Deckbuilding roguelike.</p>
         </a>
         <a class="demo-card" href="tactics/">
           <h2>Tactics</h2>
-          <p>Tactical grid combat prototype.</p>
+          <p>Grid combat prototype.</p>
         </a>
         <a class="demo-card" href="ship-tactics/">
-          <h2>Ship Tactics: Duel</h2>
-          <p>1v1 dice-and-dogfighting duel against an AI-piloted Scarab interceptor.</p>
+          <h2>Ship Tactics</h2>
+          <p>Dice-and-dogfight duel.</p>
         </a>
         <a class="demo-card" href="scythe/">
           <h2>Scythe</h2>
-          <p>Solo hex-and-resource strategy against AI-controlled factions.</p>
+          <p>Solo hex strategy vs. AI.</p>
         </a>
         <a class="demo-card" href="advance-chess/">
-          <h2>Advance Chess: Wars of the Roses</h2>
-          <p>Chess that erupts into the Wars of the Roses, then hands out battlefield upgrades.</p>
+          <h2>Advance Chess</h2>
+          <p>Chess meets Wars of the Roses.</p>
         </a>
         <a class="demo-card" href="thief-plan/">
-          <h2>Clue: Museum Caper — Thief's Pad</h2>
-          <p>A secret digital plotting pad for the Thief in Clue: The Great Museum Caper — mark cameras and paintings, plot your moves, and make your escape.</p>
+          <h2>Clue: Thief's Pad</h2>
+          <p>Secret plotting pad for Museum Caper.</p>
         </a>
         <a class="demo-card" href="outer-rim-draft/">
           <h2>Outer Rim Draft</h2>
-          <p>Portrait-phone, single-player 7 Wonders-style card draft with a Star Wars: Outer Rim flavour — pick a ship, draft a crew, trade with neighbours and win bounties.</p>
+          <p>Star Wars 7 Wonders-style draft.</p>
         </a>
       </div>
     </main>

@@ -1,0 +1,18 @@
+{
+    "scene/cache":  "scenes/cache.jpg",
+    "scene/depot":  "scenes/depot.jpg",
+    "scene/derelict":  "scenes/derelict.jpg",
+    "scene/distress":  "scenes/distress.jpg",
+    "scene/lost":  "scenes/lost.jpg",
+    "scene/storm":  "scenes/storm.jpg",
+    "scene/title":  "scenes/title.jpg",
+    "scene/won":  "scenes/won.jpg",
+    "sector/blue_nebula":  "sectors/blue_nebula.jpg",
+    "sector/deep_field":  "sectors/deep_field.jpg",
+    "sector/dust_lane":  "sectors/dust_lane.jpg",
+    "sector/red_nebula":  "sectors/red_nebula.jpg",
+    "ship/halcyon":  "ships/halcyon.png",
+    "ship/lancer":  "ships/lancer.png",
+    "ship/raider":  "ships/raider.png",
+    "ship/starbase":  "ships/starbase.png"
+}

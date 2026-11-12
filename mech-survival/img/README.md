@@ -1,21 +1,17 @@
-# Image slots (phase 2)
+# Image slots
 
-Everything on screen is requested by a **key**. Until a key is listed in `manifest.json`, the game draws a
-procedural placeholder. To replace one: put the PNG in this folder and add `"<key>": "<file.png>"` to
-`manifest.json`. No code change needed. Transparent PNGs are fine everywhere except backgrounds.
+Everything on screen is requested by a key (`<kind>_<id>`). Images here are written by the generate-art skill's
+importer to `<kind dir>/<id>.<ext>`, as set in [`art.config.json`](../../art.config.json). The game loads every id
+listed in [`art/descriptions.json`](../../art/descriptions.json) and draws a procedural placeholder for any that are
+missing. To add an image: add its id to `descriptions.json`, then generate and import it. No code change needed.
 
-| key | used for | recommended size |
-|---|---|---|
-| `bg_title`, `bg_hub`, `bg_hollow`, `bg_mile`, `bg_gate` | full-screen backgrounds (dialogue, hub, title) | 720×1338 (2× of 360×669) |
-| `portrait_<who>` — `ash odessa dov pip calloway hesk tollkeeper narrator radio crowd` | dialogue speaker | 192×192 |
-| `part_<partId>` e.g. `part_wp_mg`, `part_lg_jackal` (ids in `src/data/parts.ts`) | garage / shop icons | 96×96 |
-| `mech_<chassisId>_<player\|ally\|enemy>` — chassis `rat hound bulwark` | battle sprite (replaces the composed placeholder; facing RIGHT) | 144×144 |
-| `unit_cart` | the water cart "Bessie" | 144×144 |
-| `tile_<ground\|wall\|cover\|rad\|drift\|exit>` | battle terrain | 80×80 |
-| `crate_<bullets\|explosives\|cells\|scrap>` | map pickups | 80×80 |
+| kind | folder | used for | size |
+|---|---|---|---|
+| `bg` | `backgrounds/*.jpg` | full-screen backgrounds (title, hub, dialogue) | 720×1338 |
+| `portrait` | `portraits/*.png` | dialogue speaker | 384×384 |
+| `tile` | `tiles/*.png` | battle terrain, seamless | 128×128 |
+| `mech` | `mechs/<chassis>_<team>.png` | battle sprite, facing RIGHT, transparent | 256×256 |
+| `unit` | `units/*.png` | the water cart "Bessie", transparent | 256×256 |
 
-Example `manifest.json`:
-
-```json
-{ "portrait_odessa": "odessa.png", "bg_hub": "hub.png", "tile_wall": "wall.png" }
-```
+Part icons (`part_<partId>`) and crates (`crate_<kind>`) have no kind in `art.config.json` yet and always use
+placeholders. Files not listed in `descriptions.json` (such as the `portraits/*_b.png` alternates) are ignored.
